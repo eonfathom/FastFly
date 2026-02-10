@@ -2,7 +2,7 @@
 
 GPU-accelerated simulator for the complete *Drosophila melanogaster* (fruit fly) brain connectome — 139,255 neurons and 54.5 million synapses — targeting real-time or faster performance on a single consumer NVIDIA GPU.
 
-![Fruit fly brain](202101_Fruitfly.png)
+![Fruit fly brain](fruitfly.jpg)
 
 ## How it works
 
@@ -12,7 +12,37 @@ GPU-accelerated simulator for the complete *Drosophila melanogaster* (fruit fly)
 - **Spike detection:** Warp ballot intrinsics for bit-packed spike flags
 - **Load balancing:** Warp-per-spike with grid-stride loop
 
-Connectome data comes from [FlyWire materialization v783](https://github.com/philshiu/Drosophila_brain_model) (Shiu et al. 2024, *Nature*).
+## Data sources
+
+This simulator uses real connectome data from the [FlyWire](https://flywire.ai/) project — a collaborative effort to map every neuron and synapse in an adult *Drosophila melanogaster* brain from electron microscopy imagery.
+
+### Synaptic connectivity
+
+- **Data:** `Connectivity_783.parquet` and `Completeness_783.csv` (FlyWire materialization v783)
+- **Repository:** [philshiu/Drosophila_brain_model](https://github.com/philshiu/Drosophila_brain_model)
+- **Paper:** Shiu PK, Sterne GR, Spiller N, et al. "A Drosophila computational brain model reveals sensorimotor processing." *Nature* 634, 210–219 (2024). [doi:10.1038/s41586-024-07763-9](https://doi.org/10.1038/s41586-024-07763-9)
+- **Contents:** 139,255 neurons, 54.5M synaptic connections with signed excitatory/inhibitory weights in CSR sparse format
+
+### Neuron annotations (cell types, positions, neurotransmitters)
+
+- **Data:** `Supplemental_file1_neuron_annotations.tsv`
+- **Repository:** [flyconnectome/flywire_annotations](https://github.com/flyconnectome/flywire_annotations)
+- **Paper:** Schlegel P, Yin Y, Bates AS, et al. "Whole-brain annotation and multi-connectome cell typing of Drosophila." *Nature* 634, 139–152 (2024). [doi:10.1038/s41586-024-07686-5](https://doi.org/10.1038/s41586-024-07686-5)
+- **Contents:** Cell type classifications (super_class, cell_class, cell_type), neurotransmitter identity, laterality, nerve assignments, and 3D soma positions in FAFB voxel coordinates (4×4×40 nm resolution)
+
+### Underlying electron microscopy volume
+
+- **Dataset:** FAFB (Full Adult Fly Brain)
+- **Paper:** Zheng Z, Lauritzen JS, Perlman E, et al. "A Complete Electron Microscopy Volume of the Brain of Adult Drosophila melanogaster." *Cell* 174(3), 730–743 (2018). [doi:10.1016/j.cell.2018.06.019](https://doi.org/10.1016/j.cell.2018.06.019)
+
+### FlyWire connectome
+
+- **Platform:** [flywire.ai](https://flywire.ai/) · [Codex browser](https://codex.flywire.ai/)
+- **Paper:** Dorkenwald S, Matsliah A, Sterling AR, et al. "Neuronal wiring diagram of an adult brain." *Nature* 634, 124–138 (2024). [doi:10.1038/s41586-024-07558-y](https://doi.org/10.1038/s41586-024-07558-y)
+
+### Neuron model validation
+
+- Zhang X, Yang P, Feng J, et al. "Network Structure Governs Drosophila Brain Functionality." [arXiv:2404.17128](https://arxiv.org/abs/2404.17128) (2024). Demonstrates that network structure dominates over neuron model choice, validating the use of LIF for whole-brain simulation.
 
 ## Requirements
 
