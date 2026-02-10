@@ -757,7 +757,7 @@ function initBrain3D() {
                 const rangeY = (mxY - mnY) / 2 || 1;
                 const rangeZ = (mxZ - mnZ) / 2 || 1;
                 const uniformScale = Math.max(rangeX, rangeY, rangeZ);
-                const Z_STRETCH = 3.5; // compensate for flattened Z in voxel coords
+                const Z_STRETCH = 10.0; // FAFB voxel anisotropy correction: 40nm/4nm = 10x
                 for (let i = 0; i < brainPositions.length; i += 3) {
                     brainPositions[i]     = (brainPositions[i]     - cX) / uniformScale;
                     brainPositions[i + 1] = (brainPositions[i + 1] - cY) / uniformScale;
