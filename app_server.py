@@ -35,7 +35,7 @@ static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 sim_running = False
-batch_size = 50
+batch_size = 200
 clients: list[WebSocket] = []
 
 

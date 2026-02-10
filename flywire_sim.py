@@ -31,28 +31,8 @@ except ImportError:
 CUDA_KERNELS = r"""
 extern "C" {
 
-// Noise injection - hash-based pseudo-random background current
-__global__ void kernel_inject_noise(
-    float* __restrict__ current,
-    const unsigned int   seed,
-    const unsigned int   step,
-    const float          amplitude,
-    const int            N
-) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= N) return;
-
-    unsigned int h = i ^ (step * 2654435761u) ^ (seed * 1664525u);
-    h ^= h >> 16;
-    h *= 0x45d9f3b;
-    h ^= h >> 16;
-
-    float noise = amplitude * (((float)(h & 0xFFFF) / 32768.0f) - 1.0f);
-    current[i] += noise;
-}
-
-// LIF neuron update + warp ballot spike detection
-__global__ void kernel_update_neurons(
+// Fused noise injection + LIF neuron update + warp ballot spike detection
+__global__ void kernel_update_with_noise(
     float*        __restrict__ voltage,
     float*        __restrict__ current,
     unsigned int* __restrict__ spike_bits,
@@ -60,13 +40,25 @@ __global__ void kernel_update_neurons(
     const int                  spike_words,
     const float                tau_decay,
     const float                v_threshold,
-    const float                v_reset
+    const float                v_reset,
+    const unsigned int         seed,
+    const unsigned int         step,
+    const float                noise_amplitude
 ) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     bool spiked = false;
     if (i < N) {
-        float v = voltage[i] * tau_decay + current[i];
+        // Inline noise injection
+        unsigned int h = i ^ (step * 2654435761u) ^ (seed * 1664525u);
+        h ^= h >> 16;
+        h *= 0x45d9f3b;
+        h ^= h >> 16;
+        float noise = noise_amplitude * (((float)(h & 0xFFFF) / 32768.0f) - 1.0f);
+
+        // LIF update with noise (current stays in register)
+        float c = current[i] + noise;
+        float v = voltage[i] * tau_decay + c;
         spiked = (v >= v_threshold);
         voltage[i] = spiked ? v_reset : v;
         current[i] = 0.0f;
@@ -134,13 +126,14 @@ __global__ void kernel_compact_spikes(
     }
 }
 
-// Spike propagation - push model, warp-per-spike, grid-stride
+// Spike propagation - push model, warp-per-spike, grid-stride (INT8 weights)
 __global__ void kernel_propagate_spikes(
     const unsigned int* __restrict__ spike_idx,
     const unsigned int               num_spikes,
     const unsigned int* __restrict__ offsets,
     const unsigned int* __restrict__ targets,
-    const float*        __restrict__ weights,
+    const signed char*  __restrict__ weights,
+    const float*        __restrict__ weight_scales,
     float*              __restrict__ current
 ) {
     unsigned int warp_id  = (blockIdx.x * blockDim.x + threadIdx.x) >> 5;
@@ -151,22 +144,24 @@ __global__ void kernel_propagate_spikes(
         unsigned int neuron    = spike_idx[s];
         unsigned int syn_start = offsets[neuron];
         unsigned int syn_end   = offsets[neuron + 1];
+        float scale = weight_scales[neuron];
 
         for (unsigned int syn = syn_start + lane; syn < syn_end; syn += 32) {
             unsigned int t = targets[syn];
-            float w = weights[syn];
+            float w = (float)weights[syn] * scale;
             atomicAdd(&current[t], w);
         }
     }
 }
 
-// Spike propagation v2 - reads num_spikes from device pointer (no CPU sync needed)
+// Spike propagation v2 - reads num_spikes from device pointer (INT8 weights)
 __global__ void kernel_propagate_v2(
     const unsigned int* __restrict__ spike_idx,
     const unsigned int* __restrict__ p_num_spikes,
     const unsigned int* __restrict__ offsets,
     const unsigned int* __restrict__ targets,
-    const float*        __restrict__ weights,
+    const signed char*  __restrict__ weights,
+    const float*        __restrict__ weight_scales,
     float*              __restrict__ current
 ) {
     unsigned int num_spikes = *p_num_spikes;
@@ -180,10 +175,11 @@ __global__ void kernel_propagate_v2(
         unsigned int neuron    = spike_idx[s];
         unsigned int syn_start = offsets[neuron];
         unsigned int syn_end   = offsets[neuron + 1];
+        float scale = weight_scales[neuron];
 
         for (unsigned int syn = syn_start + lane; syn < syn_end; syn += 32) {
             unsigned int t = targets[syn];
-            float w = weights[syn];
+            float w = (float)weights[syn] * scale;
             atomicAdd(&current[t], w);
         }
     }
@@ -231,8 +227,7 @@ __global__ void kernel_count_spikes(
 def compile_kernels():
     module = cp.RawModule(code=CUDA_KERNELS, options=("--std=c++11",))
     return {
-        "noise":       module.get_function("kernel_inject_noise"),
-        "update":      module.get_function("kernel_update_neurons"),
+        "update_with_noise": module.get_function("kernel_update_with_noise"),
         "compact":     module.get_function("kernel_compact_spikes"),
         "propagate":   module.get_function("kernel_propagate_spikes"),
         "propagate_v2": module.get_function("kernel_propagate_v2"),
@@ -331,6 +326,34 @@ def print_gpu_info():
 # Run simulation
 # ================================================================
 
+def quantize_weights_int8(weights, offsets, n_neurons):
+    """Quantize FP32 weights to INT8 with per-neuron scale factors.
+
+    Uses vectorized numpy ops with np.maximum.reduceat for speed.
+    """
+    abs_weights = np.abs(weights)
+
+    # Compute per-neuron max(|w|) via reduceat (vectorized, no Python loop)
+    # reduceat needs segment starts; skip empty neurons afterward
+    starts = offsets[:-1].astype(np.intp)
+    max_abs = np.maximum.reduceat(abs_weights, starts)
+
+    # Zero out scales for empty neurons (where start == end)
+    degrees = np.diff(offsets)
+    empty = degrees == 0
+    max_abs[empty] = 0.0
+
+    scales = np.where(max_abs > 0, max_abs / 127.0, 0.0).astype(np.float32)
+
+    # Build per-synapse scale using np.repeat
+    with np.errstate(divide='ignore'):
+        inv_scales = np.where(scales > 0, 1.0 / scales, 0.0)
+    per_syn_inv_scale = np.repeat(inv_scales, degrees.astype(np.intp))
+    w_int8 = np.clip(np.round(weights * per_syn_inv_scale), -127, 127).astype(np.int8)
+
+    return w_int8, scales
+
+
 def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
                    num_timesteps=10000, warmup_steps=500, seed=42, verbose=False):
 
@@ -350,7 +373,9 @@ def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
     t0 = time.perf_counter()
     d_offsets = cp.asarray(offsets)
     d_targets = cp.asarray(targets)
-    d_weights = cp.asarray(weights)
+    w_int8, w_scales = quantize_weights_int8(weights, offsets, n_neurons)
+    d_weights = cp.asarray(w_int8)
+    d_weight_scales = cp.asarray(w_scales)
 
     # Initialize voltages randomly near threshold to kickstart activity
     rng_cp = cp.random.default_rng(seed)
@@ -361,7 +386,7 @@ def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
     d_num_spikes = cp.zeros(1, dtype=cp.uint32)
     t1 = time.perf_counter()
 
-    gpu_mb = (offsets.nbytes + targets.nbytes + weights.nbytes +
+    gpu_mb = (offsets.nbytes + targets.nbytes + n_synapses * 1 + n_neurons * 4 +
               n_neurons * 4 * 3 + spike_words * 4 + 4) / 1e6
     print(f"  Upload time: {t1-t0:.2f}s")
     print(f"  GPU memory:  {gpu_mb:.1f} MB\n")
@@ -373,7 +398,6 @@ def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
     noise_amp   = np.float32(0.4)
 
     # Timing accumulators
-    total_noise_us = 0.0
     total_update_us = 0.0
     total_compact_us = 0.0
     total_prop_us = 0.0
@@ -382,60 +406,53 @@ def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
     total_steps = warmup_steps + num_timesteps
 
     print(f"Running: {warmup_steps} warmup + {num_timesteps} benchmark timesteps")
-    print(f"{'Step':<10} {'Noise':>8} {'Update':>8} {'Compact':>8} {'Prop':>8} {'Total':>8} {'Spikes':>8} {'Rate':>7}")
-    print("-" * 80)
+    print(f"{'Step':<10} {'Update':>8} {'Compact':>8} {'Prop':>8} {'Total':>8} {'Spikes':>8} {'Rate':>7}")
+    print("-" * 72)
 
-    ev = [cp.cuda.Event() for _ in range(5)]  # start, noise, update, compact, prop
+    ev = [cp.cuda.Event() for _ in range(4)]  # start, update, compact, prop
 
     for step in range(total_steps):
         is_bench = step >= warmup_steps
-
         d_num_spikes.fill(0)
 
-        # Phase 1: Noise
+        # Phase 1: Fused noise + neuron update + spike detect
         ev[0].record()
-        kernels["noise"]((neuron_blocks,), (BLOCK,),
-            (d_current, np.uint32(seed), np.uint32(step), noise_amp, np.int32(n_neurons)))
-        ev[1].record()
-
-        # Phase 2: Neuron update + spike detect
-        kernels["update"]((neuron_blocks,), (BLOCK,),
+        kernels["update_with_noise"]((neuron_blocks,), (BLOCK,),
             (d_voltage, d_current, d_spike_bits,
              np.int32(n_neurons), np.int32(spike_words),
-             tau_decay, v_threshold, v_reset))
-        ev[2].record()
+             tau_decay, v_threshold, v_reset,
+             np.uint32(seed), np.uint32(step), noise_amp))
+        ev[1].record()
 
-        # Phase 3: Compact spikes
+        # Phase 2: Compact spikes
         kernels["compact"]((compact_blocks,), (BLOCK,),
             (d_spike_bits, d_spike_idx, d_num_spikes,
              np.int32(spike_words), np.int32(n_neurons)))
-        ev[3].record()
+        ev[2].record()
 
         # Sync to read spike count
         cp.cuda.Stream.null.synchronize()
         num_spikes = int(d_num_spikes[0])
 
-        # Phase 4: Propagate
+        # Phase 3: Propagate
         if num_spikes > 0:
             warps_per_block = PROP_BLOCK // 32
             prop_blocks = min((num_spikes + warps_per_block - 1) // warps_per_block,
                               MAX_PROP_BLOCKS)
             kernels["propagate"]((prop_blocks,), (PROP_BLOCK,),
                 (d_spike_idx, np.uint32(num_spikes),
-                 d_offsets, d_targets, d_weights, d_current))
+                 d_offsets, d_targets, d_weights, d_weight_scales, d_current))
 
-        ev[4].record()
+        ev[3].record()
         cp.cuda.Stream.null.synchronize()
 
         # Timings (ms -> us)
-        t_noise   = cp.cuda.get_elapsed_time(ev[0], ev[1]) * 1000
-        t_update  = cp.cuda.get_elapsed_time(ev[1], ev[2]) * 1000
-        t_compact = cp.cuda.get_elapsed_time(ev[2], ev[3]) * 1000
-        t_prop    = cp.cuda.get_elapsed_time(ev[3], ev[4]) * 1000
-        t_total   = t_noise + t_update + t_compact + t_prop
+        t_update  = cp.cuda.get_elapsed_time(ev[0], ev[1]) * 1000
+        t_compact = cp.cuda.get_elapsed_time(ev[1], ev[2]) * 1000
+        t_prop    = cp.cuda.get_elapsed_time(ev[2], ev[3]) * 1000
+        t_total   = t_update + t_compact + t_prop
 
         if is_bench:
-            total_noise_us   += t_noise
             total_update_us  += t_update
             total_compact_us += t_compact
             total_prop_us    += t_prop
@@ -447,26 +464,24 @@ def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
            (step < warmup_steps and step % 500 == 0) or \
            (is_bench and (step - warmup_steps) % 1000 == 0):
             phase = "BENCH" if is_bench else "WARM"
-            print(f"{phase} {step:<5} {t_noise:7.1f}  {t_update:7.1f}  {t_compact:7.1f}  "
+            print(f"{phase} {step:<5} {t_update:7.1f}  {t_compact:7.1f}  "
                   f"{t_prop:7.1f}  {t_total:7.1f}  {num_spikes:7d}  {rate:5.2f}%")
 
     # Results
-    avg_noise   = total_noise_us / num_timesteps
     avg_update  = total_update_us / num_timesteps
     avg_compact = total_compact_us / num_timesteps
     avg_prop    = total_prop_us / num_timesteps
-    avg_total   = avg_noise + avg_update + avg_compact + avg_prop
+    avg_total   = avg_update + avg_compact + avg_prop
     avg_spikes  = total_spikes / num_timesteps
 
     print()
     print("=" * 60)
     print(f"  BENCHMARK RESULTS (averaged over {num_timesteps} timesteps)")
     print("=" * 60)
-    print(f"  Noise injection:    {avg_noise:8.1f} us")
-    print(f"  Neuron update:      {avg_update:8.1f} us")
+    print(f"  Noise+Update(fused):{avg_update:8.1f} us")
     print(f"  Spike compaction:   {avg_compact:8.1f} us")
     print(f"  Spike propagation:  {avg_prop:8.1f} us")
-    print(f"  {'─'*40}")
+    print(f"  {'-'*40}")
     print(f"  Total per timestep: {avg_total:8.1f} us")
     print()
     print(f"  Avg spikes/step:    {avg_spikes:.0f} ({100*avg_spikes/n_neurons:.2f}% firing rate)")
@@ -491,13 +506,13 @@ def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
     # Bottleneck
     print()
     print("BOTTLENECK ANALYSIS:")
-    for name, val in [("Noise injection", avg_noise), ("Neuron update", avg_update),
+    for name, val in [("Noise+Update(fused)", avg_update),
                        ("Spike compaction", avg_compact), ("Spike propagation", avg_prop)]:
         print(f"  {name:<20} {100*val/avg_total:5.1f}%  ({val:.1f} us)")
 
     avg_degree = n_synapses / n_neurons
     active_syn = avg_spikes * avg_degree
-    bytes_step = active_syn * 8  # 4 bytes target + 4 bytes weight (float32)
+    bytes_step = active_syn * 5  # 4 bytes target + 1 byte weight (int8)
     bw_used = bytes_step / (avg_prop * 1e-6) / 1e9 if avg_prop > 0 else 0
 
     print()

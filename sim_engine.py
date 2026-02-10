@@ -21,7 +21,8 @@ except ImportError:
     print("ERROR: CuPy not installed.  Run:  pip install cupy-cuda12x")
     sys.exit(1)
 
-from flywire_sim import CUDA_KERNELS, compile_kernels, load_connectome_binary, generate_synthetic
+from flywire_sim import (CUDA_KERNELS, compile_kernels, load_connectome_binary,
+                         generate_synthetic, quantize_weights_int8)
 
 ANNOTATIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "neuron_annotations.npz")
@@ -45,7 +46,9 @@ class SimEngine:
         # GPU arrays — connectivity
         self.d_offsets = cp.asarray(offsets)
         self.d_targets = cp.asarray(targets)
-        self.d_weights = cp.asarray(weights)
+        w_int8, w_scales = quantize_weights_int8(weights, offsets, self.n_neurons)
+        self.d_weights = cp.asarray(w_int8)
+        self.d_weight_scales = cp.asarray(w_scales)
 
         # GPU arrays — neuron state
         rng = cp.random.default_rng(seed)
@@ -85,6 +88,8 @@ class SimEngine:
         self.send_active_indices = True
         self.send_group_rates = True
         self.send_motor_rates = True
+        self.active_indices_interval = 3  # only transfer every Nth batch
+        self._batch_counter = 0
 
         # Load annotations
         self._load_annotations()
@@ -231,10 +236,10 @@ class SimEngine:
         d_offsets = self.d_offsets
         d_targets = self.d_targets
         d_weights = self.d_weights
+        d_weight_scales = self.d_weight_scales
         neuron_to_group = self._neuron_to_group
         neuron_to_motor = self._neuron_to_motor
-        k_noise = self.kernels["noise"]
-        k_update = self.kernels["update"]
+        k_update_with_noise = self.kernels["update_with_noise"]
         k_compact = self.kernels["compact"]
         k_propagate_v2 = self.kernels["propagate_v2"]
         k_count = self.kernels["count_spikes"]
@@ -254,17 +259,13 @@ class SimEngine:
             if stim_indices is not None:
                 d_current[stim_indices] += stim_amp
 
-            k_noise(
-                (neuron_blocks,), (BLOCK,),
-                (d_current, np.uint32(self.seed),
-                 np.uint32(self.current_step), self.noise_amp,
-                 n_neurons_i32))
-
-            k_update(
+            k_update_with_noise(
                 (neuron_blocks,), (BLOCK,),
                 (d_voltage, d_current, d_spike_bits,
                  n_neurons_i32, spike_words_i32,
-                 self.tau_decay, self.v_threshold, self.v_reset))
+                 self.tau_decay, self.v_threshold, self.v_reset,
+                 np.uint32(self.seed), np.uint32(self.current_step),
+                 self.noise_amp))
 
             k_compact(
                 (compact_blocks,), (BLOCK,),
@@ -282,7 +283,7 @@ class SimEngine:
             k_propagate_v2(
                 (MAX_PROP_BLOCKS,), (PROP_BLOCK,),
                 (d_spike_idx, d_num_spikes,
-                 d_offsets, d_targets, d_weights, d_current))
+                 d_offsets, d_targets, d_weights, d_weight_scales, d_current))
 
             self.current_step += 1
 
@@ -325,8 +326,9 @@ class SimEngine:
                 motor_rates[name] = round(rate, 6)
             result["motor_rates"] = motor_rates
 
-        # Active indices (for 3D viz) — only transfer if enabled
-        if self.send_active_indices:
+        # Active indices (for 3D viz) — only transfer every Nth batch
+        self._batch_counter += 1
+        if self.send_active_indices and self._batch_counter % self.active_indices_interval == 0:
             num_last = int(d_num_spikes[0])
             if num_last > 0:
                 self._last_spike_indices = d_spike_idx[:num_last].get().astype(np.int32)
@@ -413,7 +415,7 @@ if __name__ == "__main__":
               f"spikes={metrics['spike_count']:>6d}  "
               f"rate={metrics['firing_rate']*100:>5.2f}%  "
               f"V_mean={metrics['mean_voltage']:.3f}  "
-              f"active_3d={len(metrics['active_indices'])}  "
+              f"active_3d={len(metrics.get('active_indices', []))}  "
               f"steps/s={metrics['steps_per_sec']:.0f}")
 
     print("\nDone.")
