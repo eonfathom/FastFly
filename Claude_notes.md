@@ -60,3 +60,37 @@ Propagation is still the bottleneck at 74.2% — it's fundamentally memory-bound
 - Connectivity pruning (remove weakest synapses to reduce total work)
 - Warp-cooperative target sorting to batch atomicAdds to same cache lines
 - Pull model comparison if firing rates go above ~5%
+
+## 2026-02-09: Initial Repo Setup (this machine)
+
+### What was done
+- Initialized git repo in `C:\Users\micha\Documents\FastFly`
+- Created `.gitignore` to exclude large data files and build artifacts
+- Installed GitHub CLI, authenticated as `eonfathom`
+- Created public repo `eonfathom/FastFly` and pushed initial commit
+- Added `README.md` with architecture overview, setup instructions, and project structure
+- Started the web server (`app_server.py`) on port 8000
+
+### Machine-specific details: Development Desktop (this machine)
+- **GPU:** RTX 3080 Ti (Ampere, **SM 8.6**, 80 SMs, 12GB VRAM, ~912 GB/s bandwidth)
+- `build.bat` compiles with `-arch=sm_86`
+- The Python/CuPy path (`flywire_sim.py`, `sim_engine.py`) auto-detects GPU arch at runtime — no changes needed
+- Large data files on local disk only (gitignored):
+  - `flywire_v783.bin` (116 MB) — binary connectome for the simulator
+  - `Connectivity_783.parquet` (97 MB) — raw edge list
+  - `flywire_annotations_v783.tsv` (32 MB) — neuron annotations
+  - `neuron_annotations.npz` (3.4 MB)
+  - `Completeness_783.csv` (3.2 MB) — neuron metadata
+
+### Differences from home machine (RTX 5080)
+| | This machine (dev desktop) | Home machine |
+|---|---|---|
+| **GPU** | RTX 3080 Ti (Ampere) | RTX 5080 (Blackwell) |
+| **SM arch** | sm_86 | sm_120 |
+| **VRAM** | 12 GB | 16 GB |
+| **Bandwidth** | ~912 GB/s | ~960 GB/s |
+| **SMs** | 80 | 84 |
+| **CUDA build flag** | `-arch=sm_86` | `-arch=sm_120` (needs `build.bat` edit) |
+| **Python/CuPy** | Auto-detects, works as-is | Auto-detects, works as-is |
+
+**Note:** `build.bat` currently hardcodes `sm_86`. When building the C++ path on the home machine, change `-arch=sm_86` to `-arch=sm_120`. The Python path works on both without changes since CuPy compiles kernels at runtime via nvrtc.
