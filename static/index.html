@@ -643,6 +643,21 @@ let activeStimulus = null;
 let currentTab = 'charts';
 let lastActiveIndices = [];
 
+// ---- Motor Detail Live State ----
+let currentMotorDetailGroup = null;
+let currentMotorDetailNeurons = null; // cached [{index, root_id, active}, ...]
+let motorDetailLastUpdate = 0;
+const MOTOR_DETAIL_THROTTLE_MS = 300;
+
+// ---- 3D Fly Body State ----
+let flyScene, flyCamera, flyRenderer;
+let flyBodyGroup;
+let flyMeshMap = {};
+let flyNeedsRender = false;
+let flyInitialized = false;
+let flyClickTargets = [];
+let flyStimHighlights = [];
+
 // ---- 3D Brain State ----
 let brainScene, brainCamera, brainRenderer, brainControls;
 let brainPoints = null;      // base point cloud (all neurons, dim colors)
@@ -692,6 +707,10 @@ function switchTab(tab) {
             initBrain3D();
         } else {
             onBrainResize();
+            // Show cached activity immediately
+            if (lastActiveIndices && lastActiveIndices.length > 0) {
+                updateBrainActivity(lastActiveIndices);
+            }
         }
         if (!brainAnimating) startBrainAnimation();
     }
@@ -720,7 +739,7 @@ function initBrain3D() {
     brainControls.enableDamping = true;
     brainControls.dampingFactor = 0.1;
     brainControls.rotateSpeed = 0.8;
-    brainControls.autoRotate = true;
+    brainControls.autoRotate = false;
     brainControls.autoRotateSpeed = 0.5;
 
     brainInitialized = true;
@@ -759,7 +778,7 @@ function initBrain3D() {
                 const uniformScale = Math.max(rangeX, rangeY, rangeZ);
                 const Z_STRETCH = 10.0; // FAFB voxel anisotropy correction: 40nm/4nm = 10x
                 for (let i = 0; i < brainPositions.length; i += 3) {
-                    brainPositions[i]     = (brainPositions[i]     - cX) / uniformScale;
+                    brainPositions[i]     = -((brainPositions[i]     - cX) / uniformScale); // negate X: FAFB image is L/R inverted
                     brainPositions[i + 1] = (brainPositions[i + 1] - cY) / uniformScale;
                     brainPositions[i + 2] = (brainPositions[i + 2] - cZ) / uniformScale * Z_STRETCH;
                 }
@@ -810,10 +829,10 @@ function initBrain3D() {
             glowGeom.setAttribute('color', new THREE.BufferAttribute(brainGlowColors, 3));
             glowGeom.setDrawRange(0, 0); // initially hidden
             const glowMat = new THREE.PointsMaterial({
-                size: 0.045,
+                size: 0.0225,
                 vertexColors: true,
                 transparent: true,
-                opacity: 0.9,
+                opacity: 0.5,
                 depthWrite: false,
                 blending: THREE.AdditiveBlending,
             });
@@ -990,168 +1009,300 @@ function injectCustomStimulus() {
     }
 }
 
-// ---- Fly Body SVG ----
-function createFlySVG(container, info) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 300 320');
-    svg.setAttribute('class', 'fly-svg');
-    svg.style.width = '100%';
-    svg.style.height = '100%';
-
-    const sensory = (info && info.sensory) || {};
-    const motor = (info && info.motor) || {};
-
-    function n(key) { return (sensory[key] || motor[key] || 0).toLocaleString(); }
-
-    function addPart(tag, attrs, id, label, count, stimName) {
-        const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-        el.setAttribute('class', 'fly-part');
-        el.setAttribute('id', 'fly-' + id);
-        if (stimName) {
-            el.style.cursor = 'pointer';
-            el.addEventListener('click', () => stimulateBodyPart(stimName));
-        }
-        svg.appendChild(el);
-
-        if (label) {
-            const [lx, ly] = attrs._label || [parseFloat(attrs.cx || attrs.x || 0), parseFloat(attrs.cy || attrs.y || 0)];
-            const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            txt.setAttribute('x', lx); txt.setAttribute('y', ly);
-            txt.setAttribute('class', 'fly-label');
-            txt.textContent = label;
-            svg.appendChild(txt);
-            if (count !== undefined) {
-                const ct = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                ct.setAttribute('x', lx); ct.setAttribute('y', ly + 9);
-                ct.setAttribute('class', 'fly-count');
-                ct.setAttribute('id', 'flyc-' + id);
-                ct.textContent = count;
-                svg.appendChild(ct);
+// ---- 3D Fly Body ----
+function initFly3D(container, info) {
+    // Dispose previous if re-initializing
+    if (flyRenderer) {
+        flyScene.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
             }
+        });
+        flyRenderer.dispose();
+    }
+    container.innerHTML = '';
+
+    const w = container.clientWidth || 288;
+    const h = container.clientHeight || 280;
+
+    flyRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    flyRenderer.setSize(w, h);
+    flyRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    flyRenderer.setClearColor(0x0f172a, 1);
+    container.appendChild(flyRenderer.domElement);
+    flyRenderer.domElement.style.borderRadius = '8px';
+
+    flyScene = new THREE.Scene();
+
+    // Narrow FOV for near-isometric look
+    flyCamera = new THREE.PerspectiveCamera(22, w / h, 0.1, 100);
+    flyCamera.position.set(2, 7, -6);  // behind the fly, dorsal-iso view, small X offset
+    flyCamera.lookAt(0, -0.15, -0.2);
+
+    // Lighting
+    flyScene.add(new THREE.AmbientLight(0x556677, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xaabbcc, 0.9);
+    dirLight.position.set(2, 8, -5);
+    flyScene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0x445566, 0.3);
+    fillLight.position.set(-2, 3, 4);
+    flyScene.add(fillLight);
+
+    flyBodyGroup = new THREE.Group();
+    flyMeshMap = {};
+    flyClickTargets = [];
+    flyStimHighlights = [];
+    buildFlyBody3D();
+    flyBodyGroup.scale.set(-1, 1, 1); // mirror X so fly's left = viewer's left in dorsal view
+    flyScene.add(flyBodyGroup);
+
+    // Raycasting for click-to-stimulate
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    flyRenderer.domElement.style.cursor = 'pointer';
+    flyRenderer.domElement.addEventListener('click', (event) => {
+        const rect = flyRenderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, flyCamera);
+        const intersects = raycaster.intersectObjects(flyClickTargets, false);
+        if (intersects.length > 0) {
+            const stimName = intersects[0].object.userData.stimName;
+            if (stimName) stimulateBodyPart(stimName);
         }
+    });
+
+    flyNeedsRender = true;
+    renderFly();
+    flyInitialized = true;
+
+    // Resize handler
+    new ResizeObserver(() => {
+        const nw = container.clientWidth;
+        const nh = container.clientHeight;
+        if (nw > 0 && nh > 0) {
+            flyCamera.aspect = nw / nh;
+            flyCamera.updateProjectionMatrix();
+            flyRenderer.setSize(nw, nh);
+            flyNeedsRender = true;
+            renderFly();
+        }
+    }).observe(container);
+}
+
+function renderFly() {
+    if (!flyNeedsRender || !flyRenderer) return;
+    flyRenderer.render(flyScene, flyCamera);
+    flyNeedsRender = false;
+}
+
+function makeFlyMat(color, opts) {
+    return new THREE.MeshPhongMaterial({
+        color: color,
+        emissive: 0x000000,
+        shininess: (opts && opts.shininess) || 30,
+        transparent: (opts && opts.transparent) || false,
+        opacity: (opts && opts.opacity) || 1.0,
+        side: THREE.DoubleSide, // needed because flyBodyGroup is X-mirrored
+        depthWrite: (opts && opts.transparent) ? false : true,
+        flatShading: false,
+    });
+}
+
+function addFlyMesh(name, geometry, material, pos, rot, scl, stimName) {
+    const mesh = new THREE.Mesh(geometry, material);
+    if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
+    if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
+    if (scl) mesh.scale.set(scl[0], scl[1], scl[2]);
+    mesh.name = name;
+    mesh.userData.stimName = stimName || null;
+    flyBodyGroup.add(mesh);
+    flyMeshMap[name] = mesh;
+    if (stimName) flyClickTargets.push(mesh);
+    return mesh;
+}
+
+function addFlyHitbox(parent, geometry, pos, rot, scl, stimName) {
+    const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    const hb = new THREE.Mesh(geometry, mat);
+    if (pos) hb.position.set(pos[0], pos[1], pos[2]);
+    if (rot) hb.rotation.set(rot[0], rot[1], rot[2]);
+    if (scl) hb.scale.set(scl[0], scl[1], scl[2]);
+    hb.userData.stimName = stimName;
+    flyBodyGroup.add(hb);
+    flyClickTargets.push(hb);
+    return hb;
+}
+
+function buildFlyBody3D() {
+    const bodyColor = 0x2a3545;
+    const darkBodyColor = 0x222d3a;
+    const eyeColor = 0x771122;
+    const legColor = 0x3a4858;
+    const wingColor = 0x6688aa;
+
+    // --- Head ---
+    const headGeom = new THREE.SphereGeometry(0.38, 20, 14);
+    addFlyMesh('head', headGeom, makeFlyMat(bodyColor),
+        [0, 0.05, 1.5], null, [1.35, 0.85, 0.95], null);
+
+    // --- Compound Eyes (large, protruding) ---
+    const eyeGeom = new THREE.SphereGeometry(0.24, 14, 10);
+    addFlyMesh('eye_l', eyeGeom, makeFlyMat(eyeColor, {shininess: 60}),
+        [-0.38, 0.12, 1.6], null, [0.85, 1.1, 0.9], 'Light (left eye)');
+    addFlyMesh('eye_r', eyeGeom, makeFlyMat(eyeColor, {shininess: 60}),
+        [0.38, 0.12, 1.6], null, [0.85, 1.1, 0.9], 'Light (right eye)');
+
+    // --- Ocelli (three small dots on top of head) ---
+    const ocellusGeom = new THREE.SphereGeometry(0.04, 8, 6);
+    const ocellusMat = makeFlyMat(0x556677, {shininess: 80});
+    addFlyMesh('ocellus_c', ocellusGeom, ocellusMat, [0, 0.3, 1.55], null, null, null);
+    addFlyMesh('ocellus_l', ocellusGeom, ocellusMat.clone(), [-0.08, 0.28, 1.6], null, null, null);
+    addFlyMesh('ocellus_r', ocellusGeom, ocellusMat.clone(), [0.08, 0.28, 1.6], null, null, null);
+
+    // --- Antennae (short, segmented, with arista) ---
+    function makeAntenna(side) {
+        const sx = side * 0.12;
+        // Funiculus (main segment)
+        const funCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(sx, 0.22, 1.82),
+            new THREE.Vector3(side * 0.18, 0.4, 2.0),
+            new THREE.Vector3(side * 0.15, 0.48, 2.12),
+        ]);
+        const funGeom = new THREE.TubeGeometry(funCurve, 8, 0.04, 6, false);
+        const stimName = side < 0 ? 'Tickle (left antenna)' : 'Tickle (right antenna)';
+        addFlyMesh(side < 0 ? 'ant_l' : 'ant_r', funGeom, makeFlyMat(legColor),
+            null, null, null, stimName);
+        // Arista (thin bristle)
+        const aristaCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(side * 0.15, 0.48, 2.12),
+            new THREE.Vector3(side * 0.3, 0.7, 2.3),
+            new THREE.Vector3(side * 0.22, 0.85, 2.5),
+        ]);
+        const aristaGeom = new THREE.TubeGeometry(aristaCurve, 8, 0.012, 4, false);
+        addFlyMesh(side < 0 ? 'arista_l' : 'arista_r', aristaGeom, makeFlyMat(legColor),
+            null, null, null, stimName);
+    }
+    makeAntenna(-1);
+    makeAntenna(1);
+
+    // --- Proboscis ---
+    const probCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, -0.22, 1.6),
+        new THREE.Vector3(0, -0.48, 1.78),
+        new THREE.Vector3(0, -0.62, 1.72),
+    ]);
+    const probGeom = new THREE.TubeGeometry(probCurve, 8, 0.03, 6, false);
+    addFlyMesh('proboscis', probGeom, makeFlyMat(legColor), null, null, null, 'Sugar (proboscis)');
+    // Labellum (tip)
+    const labGeom = new THREE.SphereGeometry(0.05, 8, 6);
+    addFlyMesh('labellum', labGeom, makeFlyMat(legColor),
+        [0, -0.63, 1.71], null, [1, 0.6, 1], 'Sugar (proboscis)');
+
+    // --- Thorax (large, humped) ---
+    const thoraxGeom = new THREE.SphereGeometry(0.52, 20, 14);
+    addFlyMesh('thorax', thoraxGeom, makeFlyMat(bodyColor),
+        [0, 0.15, 0.55], null, [0.95, 0.9, 1.15], null);
+    // Scutellum (small bump at back of thorax)
+    const scutGeom = new THREE.SphereGeometry(0.18, 10, 8);
+    addFlyMesh('scutellum', scutGeom, makeFlyMat(bodyColor),
+        [0, 0.38, 0.2], null, [1.2, 0.6, 1.0], null);
+
+    // --- Wings ---
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, 0);
+    wingShape.bezierCurveTo(0.1, 0.5, 0.6, 1.1, 1.4, 1.2);
+    wingShape.bezierCurveTo(1.9, 1.15, 2.2, 0.7, 2.1, 0.3);
+    wingShape.bezierCurveTo(2.0, 0.0, 1.6, -0.2, 1.1, -0.15);
+    wingShape.bezierCurveTo(0.5, -0.1, 0.1, -0.05, 0, 0);
+    const wingGeom = new THREE.ShapeGeometry(wingShape);
+
+    // Wing veins - add subtle thickness
+    const wingMatL = makeFlyMat(wingColor, {transparent: true, opacity: 0.22, doubleSide: true, shininess: 80});
+    const wingMatR = makeFlyMat(wingColor, {transparent: true, opacity: 0.22, doubleSide: true, shininess: 80});
+
+    // Left wing (extends to -X)
+    addFlyMesh('wing_l', wingGeom, wingMatL,
+        [-0.25, 0.42, 0.65], [-0.25, -0.35, -0.08], [-1, 0.9, 0.9], null);
+    // Right wing (extends to +X)
+    addFlyMesh('wing_r', wingGeom.clone(), wingMatR,
+        [0.25, 0.42, 0.65], [-0.25, 0.35, 0.08], [1, 0.9, 0.9], null);
+
+    // --- Abdomen (tapered, segmented via lathe) ---
+    const abdProfile = [
+        new THREE.Vector2(0.01, 0),
+        new THREE.Vector2(0.2, 0.1),
+        new THREE.Vector2(0.4, 0.3),
+        new THREE.Vector2(0.52, 0.55),
+        new THREE.Vector2(0.55, 0.8),
+        new THREE.Vector2(0.52, 1.05),
+        new THREE.Vector2(0.44, 1.25),
+        new THREE.Vector2(0.32, 1.45),
+        new THREE.Vector2(0.18, 1.6),
+        new THREE.Vector2(0.08, 1.7),
+        new THREE.Vector2(0.01, 1.78),
+    ];
+    const abdGeom = new THREE.LatheGeometry(abdProfile, 18);
+    // Rotate so it extends along -Z (posterior)
+    addFlyMesh('abdomen', abdGeom, makeFlyMat(darkBodyColor),
+        [0, 0.1, -0.05], [Math.PI * 0.52, 0, 0], [1, 1, 1], null);
+
+    // Abdomen segment lines (tergite stripes)
+    for (let s = 0; s < 5; s++) {
+        const t = 0.25 + s * 0.15;
+        const segZ = -0.05 - t * 1.78;
+        const segR = 0.01 + abdProfile[Math.min(Math.floor(t * 10), 10)].x;
+        const ringGeom = new THREE.TorusGeometry(segR * 0.95, 0.008, 4, 18);
+        const ringMat = makeFlyMat(0x1a2535);
+        addFlyMesh('abd_seg_' + s, ringGeom, ringMat,
+            [0, 0.08 + s * 0.015, segZ], [Math.PI/2, 0, 0], null, null);
     }
 
-    const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    title.setAttribute('x', 150); title.setAttribute('y', 14);
-    title.setAttribute('class', 'fly-label');
-    title.setAttribute('font-size', '9');
-    title.setAttribute('fill', '#60a5fa');
-    title.textContent = 'Drosophila melanogaster';
-    svg.appendChild(title);
+    // --- Halteres (small knobs behind wings) ---
+    const haltGeom = new THREE.SphereGeometry(0.04, 6, 4);
+    addFlyMesh('haltere_l', haltGeom, makeFlyMat(legColor), [-0.35, 0.05, -0.05], null, null, null);
+    addFlyMesh('haltere_r', haltGeom, makeFlyMat(legColor), [0.35, 0.05, -0.05], null, null, null);
 
-    // Antennae
-    addPart('path', {
-        d: 'M120,50 Q100,25 90,20 Q85,18 88,22 Q95,30 115,52',
-        fill: 'none', stroke: '#475569', 'stroke-width': 4,
-        _label: [80, 18]
-    }, 'ant_l', 'L Antenna', `${n('antenna_mech_left')}+${n('antenna_olf_left')}`,
-    'Tickle (left antenna)');
+    // --- Legs (3 pairs with joints) ---
+    function makeLeg(suffix, pts, stimName) {
+        const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])));
+        const geom = new THREE.TubeGeometry(curve, 12, 0.025, 5, false);
+        addFlyMesh('leg_' + suffix, geom, makeFlyMat(legColor), null, null, null, stimName);
+        // Joint spheres for detail
+        pts.slice(1, -1).forEach((p, i) => {
+            const jGeom = new THREE.SphereGeometry(0.035, 6, 4);
+            addFlyMesh('joint_' + suffix + '_' + i, jGeom, makeFlyMat(legColor), p, null, null, stimName);
+        });
+        // Wider invisible hitbox for clicking
+        const hbGeom = new THREE.TubeGeometry(curve, 8, 0.1, 4, false);
+        addFlyHitbox(null, hbGeom, null, null, null, stimName);
+    }
 
-    addPart('path', {
-        d: 'M180,50 Q200,25 210,20 Q215,18 212,22 Q205,30 185,52',
-        fill: 'none', stroke: '#475569', 'stroke-width': 4,
-        _label: [220, 18]
-    }, 'ant_r', 'R Antenna', `${n('antenna_mech_right')}+${n('antenna_olf_right')}`,
-    'Tickle (right antenna)');
+    // Front legs (forward and down)
+    makeLeg('fl', [
+        [-0.42, -0.1, 0.95], [-0.65, -0.35, 1.15], [-0.85, -0.6, 1.3], [-0.95, -0.85, 1.45]
+    ], 'Touch (left leg/body)');
+    makeLeg('fr', [
+        [0.42, -0.1, 0.95], [0.65, -0.35, 1.15], [0.85, -0.6, 1.3], [0.95, -0.85, 1.45]
+    ], 'Touch (right leg/body)');
 
-    // Head
-    addPart('ellipse', {
-        cx: 150, cy: 65, rx: 40, ry: 22, _label: [150, 68]
-    }, 'head', 'Head', '', null);
+    // Mid legs (sideways and down)
+    makeLeg('ml', [
+        [-0.48, -0.12, 0.55], [-0.75, -0.35, 0.5], [-1.05, -0.65, 0.35], [-1.2, -0.9, 0.2]
+    ], 'Touch (left leg/body)');
+    makeLeg('mr', [
+        [0.48, -0.12, 0.55], [0.75, -0.35, 0.5], [1.05, -0.65, 0.35], [1.2, -0.9, 0.2]
+    ], 'Touch (right leg/body)');
 
-    // Eyes
-    addPart('ellipse', {
-        cx: 118, cy: 60, rx: 14, ry: 18, _label: [105, 55]
-    }, 'eye_l', 'L Eye', n('eye_left'), 'Light (left eye)');
-
-    addPart('ellipse', {
-        cx: 182, cy: 60, rx: 14, ry: 18, _label: [195, 55]
-    }, 'eye_r', 'R Eye', n('eye_right'), 'Light (right eye)');
-
-    // Proboscis
-    addPart('path', {
-        d: 'M143,87 Q140,100 142,110 Q145,115 148,115 Q152,115 155,110 Q157,100 155,87',
-        _label: [148, 120]
-    }, 'proboscis', 'Proboscis', `${n('proboscis_gust')} sens / ${n('motor_proboscis')} motor`,
-    'Sugar (proboscis)');
-
-    // Thorax
-    addPart('ellipse', {
-        cx: 150, cy: 145, rx: 45, ry: 35, _label: [150, 148]
-    }, 'thorax', 'Thorax', '', null);
-
-    // Wings
-    addPart('path', {
-        d: 'M105,135 Q55,120 40,145 Q35,160 60,165 Q85,168 105,155',
-        _label: [60, 150]
-    }, 'wing_l', 'L Wing', '', null);
-
-    addPart('path', {
-        d: 'M195,135 Q245,120 260,145 Q265,160 240,165 Q215,168 195,155',
-        _label: [240, 150]
-    }, 'wing_r', 'R Wing', '', null);
-
-    // Abdomen
-    addPart('path', {
-        d: 'M115,175 Q110,200 112,230 Q115,260 130,275 Q140,282 150,285 Q160,282 170,275 Q185,260 188,230 Q190,200 185,175',
-        _label: [150, 240]
-    }, 'abdomen', 'Abdomen', '', null);
-
-    // Legs
-    addPart('path', {
-        d: 'M115,125 Q85,105 65,95 Q55,90 50,95 Q48,100 55,102 Q70,108 90,120',
-        fill: 'none', stroke: '#475569', 'stroke-width': 3,
-        _label: [42, 92]
-    }, 'leg_fl', 'FL', n('body_left'), 'Touch (left leg/body)');
-
-    addPart('path', {
-        d: 'M185,125 Q215,105 235,95 Q245,90 250,95 Q252,100 245,102 Q230,108 210,120',
-        fill: 'none', stroke: '#475569', 'stroke-width': 3,
-        _label: [258, 92]
-    }, 'leg_fr', 'FR', n('body_right'), 'Touch (right leg/body)');
-
-    addPart('path', {
-        d: 'M108,150 Q75,155 50,160 Q38,162 35,168 Q34,173 40,172 Q58,168 80,160',
-        fill: 'none', stroke: '#475569', 'stroke-width': 3,
-        _label: [28, 168]
-    }, 'leg_ml', 'ML', '', 'Touch (left leg/body)');
-
-    addPart('path', {
-        d: 'M192,150 Q225,155 250,160 Q262,162 265,168 Q266,173 260,172 Q242,168 220,160',
-        fill: 'none', stroke: '#475569', 'stroke-width': 3,
-        _label: [272, 168]
-    }, 'leg_mr', 'MR', '', 'Touch (right leg/body)');
-
-    addPart('path', {
-        d: 'M115,178 Q85,195 60,215 Q48,222 45,228 Q44,234 50,231 Q65,220 90,200',
-        fill: 'none', stroke: '#475569', 'stroke-width': 3,
-        _label: [36, 232]
-    }, 'leg_hl', 'HL', '', 'Touch (left leg/body)');
-
-    addPart('path', {
-        d: 'M185,178 Q215,195 240,215 Q252,222 255,228 Q256,234 250,231 Q235,220 210,200',
-        fill: 'none', stroke: '#475569', 'stroke-width': 3,
-        _label: [264, 232]
-    }, 'leg_hr', 'HR', '', 'Touch (right leg/body)');
-
-    // Descending neuron labels
-    const descL = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    descL.setAttribute('x', 130); descL.setAttribute('y', 165);
-    descL.setAttribute('class', 'fly-count');
-    descL.setAttribute('id', 'flyc-desc-l');
-    descL.textContent = `desc L: ${n('descending_left')}`;
-    svg.appendChild(descL);
-
-    const descR = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    descR.setAttribute('x', 170); descR.setAttribute('y', 165);
-    descR.setAttribute('class', 'fly-count');
-    descR.setAttribute('id', 'flyc-desc-r');
-    descR.textContent = `desc R: ${n('descending_right')}`;
-    svg.appendChild(descR);
-
-    container.innerHTML = '';
-    container.appendChild(svg);
+    // Hind legs (backward and down)
+    makeLeg('hl', [
+        [-0.4, -0.12, 0.15], [-0.6, -0.3, -0.15], [-0.82, -0.6, -0.5], [-0.95, -0.88, -0.8]
+    ], 'Touch (left leg/body)');
+    makeLeg('hr', [
+        [0.4, -0.12, 0.15], [0.6, -0.3, -0.15], [0.82, -0.6, -0.5], [0.95, -0.88, -0.8]
+    ], 'Touch (right leg/body)');
 }
 
 function stimulateBodyPart(stimName) {
@@ -1165,64 +1316,88 @@ function stimulateBodyPart(stimName) {
 }
 
 function highlightStimulated(stimName) {
-    document.querySelectorAll('.fly-part').forEach(el => el.classList.remove('stimulated'));
+    // Clear previous stimulus highlights
+    clearFlyStimHighlight();
 
     const mapping = {
-        'Tickle (left antenna)': ['fly-ant_l'],
-        'Tickle (right antenna)': ['fly-ant_r'],
-        'Light (left eye)': ['fly-eye_l'],
-        'Light (right eye)': ['fly-eye_r'],
-        'Sugar (proboscis)': ['fly-proboscis'],
-        'Sugar (left proboscis)': ['fly-proboscis'],
-        'Sugar (right proboscis)': ['fly-proboscis'],
-        'Touch (left leg/body)': ['fly-leg_fl', 'fly-leg_ml', 'fly-leg_hl'],
-        'Touch (right leg/body)': ['fly-leg_fr', 'fly-leg_mr', 'fly-leg_hr'],
-        'Odor (left antenna)': ['fly-ant_l'],
-        'Odor (right antenna)': ['fly-ant_r'],
-        'Odor (both antennae)': ['fly-ant_l', 'fly-ant_r'],
+        'Tickle (left antenna)': ['ant_l', 'arista_l'],
+        'Tickle (right antenna)': ['ant_r', 'arista_r'],
+        'Light (left eye)': ['eye_l'],
+        'Light (right eye)': ['eye_r'],
+        'Sugar (proboscis)': ['proboscis', 'labellum'],
+        'Sugar (left proboscis)': ['proboscis', 'labellum'],
+        'Sugar (right proboscis)': ['proboscis', 'labellum'],
+        'Touch (left leg/body)': ['leg_fl', 'leg_ml', 'leg_hl'],
+        'Touch (right leg/body)': ['leg_fr', 'leg_mr', 'leg_hr'],
+        'Odor (left antenna)': ['ant_l', 'arista_l'],
+        'Odor (right antenna)': ['ant_r', 'arista_r'],
+        'Odor (both antennae)': ['ant_l', 'arista_l', 'ant_r', 'arista_r'],
     };
-    const ids = mapping[stimName] || [];
-    ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('stimulated');
+    const names = mapping[stimName] || [];
+    names.forEach(name => {
+        const mesh = flyMeshMap[name];
+        if (!mesh || !mesh.geometry) return;
+        const edges = new THREE.EdgesGeometry(mesh.geometry);
+        const line = new THREE.LineSegments(edges,
+            new THREE.LineBasicMaterial({ color: 0x34d399, linewidth: 1 })
+        );
+        line.position.copy(mesh.position);
+        line.rotation.copy(mesh.rotation);
+        line.scale.copy(mesh.scale);
+        flyBodyGroup.add(line);
+        flyStimHighlights.push(line);
     });
+
+    // Also highlight stim-zones in left panel
+    document.querySelectorAll('.stim-zone').forEach(z => z.classList.remove('stim-active'));
+    flyNeedsRender = true;
+    renderFly();
+}
+
+function clearFlyStimHighlight() {
+    if (!flyBodyGroup) return;
+    flyStimHighlights.forEach(line => {
+        flyBodyGroup.remove(line);
+        line.geometry.dispose();
+        line.material.dispose();
+    });
+    flyStimHighlights = [];
 }
 
 function updateFlyMotorColors(motorRates) {
-    if (!motorRates) return;
+    if (!motorRates || !flyInitialized) return;
 
-    const motorToFly = {
-        'motor_proboscis': ['fly-proboscis'],
-        'motor_antenna': ['fly-ant_l', 'fly-ant_r'],
-        'motor_neck': ['fly-head'],
-        'motor_eye': ['fly-eye_l', 'fly-eye_r'],
-        'descending_left': ['fly-leg_fl', 'fly-leg_ml', 'fly-leg_hl', 'fly-wing_l'],
-        'descending_right': ['fly-leg_fr', 'fly-leg_mr', 'fly-leg_hr', 'fly-wing_r'],
+    const motorToMesh = {
+        'motor_proboscis': ['proboscis', 'labellum'],
+        'motor_antenna': ['ant_l', 'ant_r', 'arista_l', 'arista_r'],
+        'motor_neck': ['head'],
+        'motor_eye': ['eye_l', 'eye_r'],
+        'descending_left': ['leg_fl', 'leg_ml', 'leg_hl', 'wing_l'],
+        'descending_right': ['leg_fr', 'leg_mr', 'leg_hr', 'wing_r'],
     };
 
-    for (const [group, partIds] of Object.entries(motorToFly)) {
+    let changed = false;
+    for (const [group, meshNames] of Object.entries(motorToMesh)) {
         const rate = motorRates[group] || 0;
         const intensity = Math.min(rate / 0.08, 1.0);
-        partIds.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
+        meshNames.forEach(name => {
+            const mesh = flyMeshMap[name];
+            if (!mesh || !mesh.material || !mesh.material.emissive) return;
             if (intensity > 0.01) {
-                const r = Math.round(30 + 225 * intensity);
-                const g = Math.round(41 + 80 * intensity);
-                const b = Math.round(59 - 30 * intensity);
-                el.style.fill = `rgb(${r},${g},${b})`;
-                if (el.tagName === 'path') {
-                    el.style.stroke = `rgb(${r},${g},${b})`;
-                    el.style.fill = 'none';
-                }
+                mesh.material.emissive.setRGB(
+                    intensity * 0.95,
+                    intensity * 0.45,
+                    intensity * 0.05
+                );
             } else {
-                el.style.fill = '#1e293b';
-                if (el.tagName === 'path') {
-                    el.style.stroke = '#475569';
-                    el.style.fill = 'none';
-                }
+                mesh.material.emissive.setRGB(0, 0, 0);
             }
+            changed = true;
         });
+    }
+    if (changed) {
+        flyNeedsRender = true;
+        requestAnimationFrame(renderFly);
     }
 }
 
@@ -1283,13 +1458,17 @@ function updateMotorGrid(motorRates) {
 // ---- Motor Detail Modal ----
 function requestMotorDetail(groupKey, displayName) {
     if (ws && ws.readyState === 1) {
+        currentMotorDetailGroup = groupKey;
+        currentMotorDetailNeurons = null;
         ws.send(JSON.stringify({cmd: 'motor_detail', group: groupKey}));
-        // Store the display name for when response arrives
         document.getElementById('modal-group-name').textContent = displayName + ' Neurons';
     }
 }
 
 function showMotorDetail(data) {
+    // Guard: ignore stale responses for a different group
+    if (data.group !== currentMotorDetailGroup) return;
+
     const modal = document.getElementById('motor-modal');
     const tbody = document.getElementById('modal-neuron-tbody');
     const subtitle = document.getElementById('modal-subtitle');
@@ -1298,23 +1477,23 @@ function showMotorDetail(data) {
         (data.group || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + ' Neurons';
 
     const neurons = data.neurons || [];
+    // Cache for live updates (sorted by index for stable display)
+    neurons.sort((a, b) => a.index - b.index);
+    currentMotorDetailNeurons = neurons;
+
     const activeCount = neurons.filter(n => n.active).length;
     subtitle.innerHTML =
         `<span class="active-count">${activeCount} active</span> / ` +
         `<span class="total-count">${neurons.length} total</span> neurons`;
 
-    // Sort: active first, then by index
-    neurons.sort((a, b) => {
-        if (a.active !== b.active) return b.active ? 1 : -1;
-        return a.index - b.index;
-    });
-
+    // Build table rows with data-index for in-place updates
     tbody.innerHTML = '';
     neurons.forEach(n => {
         const tr = document.createElement('tr');
+        tr.dataset.neuronIndex = n.index;
         if (n.active) tr.className = 'neuron-active';
         tr.innerHTML = `
-            <td>${n.active ? 'FIRING' : 'quiet'}</td>
+            <td class="status-cell">${n.active ? 'FIRING' : 'quiet'}</td>
             <td>${n.index}</td>
             <td>${n.root_id}</td>
         `;
@@ -1324,8 +1503,38 @@ function showMotorDetail(data) {
     modal.classList.add('visible');
 }
 
+function updateMotorDetailLive() {
+    if (!currentMotorDetailGroup || !currentMotorDetailNeurons) return;
+    const now = performance.now();
+    if (now - motorDetailLastUpdate < MOTOR_DETAIL_THROTTLE_MS) return;
+    motorDetailLastUpdate = now;
+
+    const activeSet = new Set(lastActiveIndices);
+    const tbody = document.getElementById('modal-neuron-tbody');
+    const rows = tbody.children;
+    let activeCount = 0;
+
+    for (let i = 0; i < currentMotorDetailNeurons.length && i < rows.length; i++) {
+        const n = currentMotorDetailNeurons[i];
+        const wasActive = n.active;
+        n.active = activeSet.has(n.index);
+        if (n.active) activeCount++;
+        if (n.active !== wasActive) {
+            const tr = rows[i];
+            tr.className = n.active ? 'neuron-active' : '';
+            tr.children[0].textContent = n.active ? 'FIRING' : 'quiet';
+        }
+    }
+
+    document.getElementById('modal-subtitle').innerHTML =
+        `<span class="active-count">${activeCount} active</span> / ` +
+        `<span class="total-count">${currentMotorDetailNeurons.length} total</span> neurons`;
+}
+
 function closeMotorModal() {
     document.getElementById('motor-modal').classList.remove('visible');
+    currentMotorDetailGroup = null;
+    currentMotorDetailNeurons = null;
 }
 
 // Close modal on overlay click
@@ -1364,8 +1573,13 @@ function connect() {
             bodyInfo = msg.body_info;
             document.getElementById('m-neurons').textContent = msg.n_neurons.toLocaleString();
             document.getElementById('m-synapses').textContent = msg.n_synapses.toLocaleString();
-            createFlySVG(document.getElementById('fly-body-svg-container'), bodyInfo);
+            initFly3D(document.getElementById('fly-body-svg-container'), bodyInfo);
             buildMotorGrid(bodyInfo);
+            // Re-sync data toggles with server (page reload resets HTML checkboxes to checked,
+            // but server may still have toggles off from a previous session)
+            sendParam('send_active_indices', document.getElementById('tog-3d').checked ? 1 : 0);
+            sendParam('send_group_rates', document.getElementById('tog-heatmap').checked ? 1 : 0);
+            sendParam('send_motor_rates', document.getElementById('tog-motor').checked ? 1 : 0);
         } else if (msg.type === 'state') {
             running = msg.running;
             updateRunState();
@@ -1393,7 +1607,9 @@ function clearStimulus() {
     sendCmd('clear_stimulus');
     activeStimulus = null;
     document.getElementById('stim-status').textContent = '';
-    document.querySelectorAll('.fly-part').forEach(el => el.classList.remove('stimulated'));
+    clearFlyStimHighlight();
+    flyNeedsRender = true;
+    renderFly();
     document.querySelectorAll('.stim-zone').forEach(z => z.classList.remove('stim-active'));
 }
 
@@ -1445,6 +1661,7 @@ function updateMetrics(m) {
     updateTimeseries();
     updateFlyMotorColors(m.motor_rates);
     updateMotorGrid(m.motor_rates);
+    updateMotorDetailLive();
 
     // Update 3D brain if visible
     if (m.active_indices) {
