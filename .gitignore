@@ -1,0 +1,21 @@
+# Large data files (exceed GitHub limits)
+flywire_v783.bin
+Connectivity_783.parquet
+flywire_annotations_v783.tsv
+neuron_annotations.npz
+Completeness_783.csv
+
+# Build artifacts
+*.exe
+*.obj
+*.o
+*.exp
+*.lib
+*.pdb
+
+# Python
+__pycache__/
+*.pyc
+
+# Misc
+nul

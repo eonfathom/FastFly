@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlyWire Connectome Simulator</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0a0e17;
+    color: #e0e0e0;
+    height: 100vh;
+    overflow: hidden;
+}
+.layout {
+    display: grid;
+    grid-template-columns: 260px 1fr 320px;
+    height: 100vh;
+    gap: 0;
+}
+.panel {
+    padding: 16px;
+    overflow-y: auto;
+}
+.panel-left {
+    background: #111827;
+    border-right: 1px solid #1e293b;
+}
+.panel-center {
+    background: #0a0e17;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+}
+.panel-right {
+    background: #111827;
+    border-left: 1px solid #1e293b;
+}
+h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #60a5fa;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+}
+h2 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 16px 0 8px 0;
+}
+.btn-group {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+button {
+    padding: 7px 14px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+button:hover { background: #334155; }
+button.active { background: #2563eb; border-color: #3b82f6; }
+button.inject { background: #065f46; border-color: #10b981; }
+button.inject:hover { background: #047857; }
+button.clear { background: #7f1d1d; border-color: #ef4444; }
+button.clear:hover { background: #991b1b; }
+label {
+    display: block;
+    font-size: 12px;
+    color: #94a3b8;
+    margin: 8px 0 4px 0;
+}
+select, input[type="number"], input[type="range"] {
+    width: 100%;
+    padding: 6px 8px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    color: #e2e8f0;
+    border-radius: 4px;
+    font-size: 13px;
+}
+input[type="range"] {
+    padding: 0;
+    margin: 4px 0;
+}
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.slider-row input[type="range"] { flex: 1; }
+.slider-val {
+    font-size: 12px;
+    color: #60a5fa;
+    min-width: 36px;
+    text-align: right;
+}
+.metric-card {
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+}
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+.metric-label {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+.metric-value.rate { color: #34d399; }
+.metric-value.speed { color: #60a5fa; }
+.metric-value.voltage { color: #fbbf24; }
+.status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+.status-dot.connected { background: #34d399; }
+.status-dot.disconnected { background: #ef4444; }
+.status-dot.running { background: #34d399; animation: pulse 1s infinite; }
+.status-dot.paused { background: #fbbf24; }
+@keyframes pulse { 50% { opacity: 0.4; } }
+#status-bar {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+}
+.chart-container { flex: 1; min-height: 0; }
+#heatmap { width: 100%; height: 55%; }
+#timeseries { width: 100%; height: 25%; }
+.custom-range { display: none; }
+.custom-range.visible { display: block; }
+
+/* Tab system */
+.tab-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+.tab-btn {
+    padding: 5px 16px;
+    font-size: 12px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #94a3b8;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.tab-btn:hover { background: #334155; color: #e2e8f0; }
+.tab-btn.active { background: #2563eb; border-color: #3b82f6; color: #fff; }
+.tab-content { display: none; flex: 1; min-height: 0; }
+.tab-content.active { display: flex; flex-direction: column; }
+
+/* 3D Brain container */
+#brain-container {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #050510;
+}
+#brain-container canvas { width: 100% !important; height: 100% !important; }
+#brain-info {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 11px;
+    color: #667;
+    pointer-events: none;
+    line-height: 1.5;
+}
+#brain-legend {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    font-size: 10px;
+    color: #aab;
+    pointer-events: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: rgba(5,5,16,0.7);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+/* Mini stimulus body map */
+.stim-body-map {
+    position: relative;
+    width: 100%;
+    margin: 4px 0;
+}
+.stim-body-map svg { width: 100%; }
+.stim-zone {
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.stim-zone:hover { opacity: 0.8; }
+.stim-zone rect, .stim-zone ellipse, .stim-zone path {
+    fill: #1e293b;
+    stroke: #475569;
+    stroke-width: 1;
+    transition: fill 0.15s, stroke 0.15s;
+}
+.stim-zone:hover rect, .stim-zone:hover ellipse, .stim-zone:hover path {
+    fill: #2d3a52;
+    stroke: #60a5fa;
+    stroke-width: 1.5;
+}
+.stim-zone.stim-active rect, .stim-zone.stim-active ellipse, .stim-zone.stim-active path {
+    fill: #065f46;
+    stroke: #34d399;
+    stroke-width: 1.5;
+    stroke-dasharray: 3 1.5;
+}
+.stim-zone-label {
+    font-size: 7.5px;
+    fill: #94a3b8;
+    text-anchor: middle;
+    pointer-events: none;
+}
+.stim-zone-icon {
+    font-size: 11px;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+/* Fly body SVG styles */
+.fly-container {
+    position: relative;
+    width: 100%;
+    height: 20%;
+    min-height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.fly-svg { width: 100%; height: 100%; }
+.fly-part {
+    fill: #1e293b;
+    stroke: #475569;
+    stroke-width: 1;
+    cursor: pointer;
+    transition: fill 0.2s;
+}
+.fly-part:hover { stroke: #60a5fa; stroke-width: 2; }
+.fly-part.stimulated { stroke: #34d399; stroke-width: 2; stroke-dasharray: 4 2; }
+.fly-label {
+    font-size: 7px;
+    fill: #94a3b8;
+    text-anchor: middle;
+    pointer-events: none;
+}
+.fly-count {
+    font-size: 6px;
+    fill: #64748b;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+/* Motor readout section */
+.motor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    margin-top: 4px;
+}
+.motor-card {
+    background: #1e293b;
+    border-radius: 6px;
+    padding: 6px 8px;
+    text-align: center;
+    border: 1px solid #1e293b;
+    transition: border-color 0.3s, background 0.3s;
+    cursor: pointer;
+}
+.motor-card:hover {
+    border-color: #60a5fa;
+    background: #1e2d4a;
+}
+.motor-card.active {
+    border-color: #f97316;
+}
+.motor-name {
+    font-size: 9px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.motor-rate {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-top: 1px;
+}
+.motor-count {
+    font-size: 8px;
+    color: #64748b;
+}
+.motor-bar {
+    height: 3px;
+    background: #0f172a;
+    border-radius: 2px;
+    margin-top: 3px;
+    overflow: hidden;
+}
+.motor-bar-fill {
+    height: 100%;
+    background: #f97316;
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s, background 0.3s;
+}
+.motor-click-hint {
+    font-size: 7px;
+    color: #475569;
+    margin-top: 2px;
+}
+
+/* Motor detail modal */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+.modal-overlay.visible { display: flex; }
+.modal-box {
+    background: #111827;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 520px;
+    width: 90%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #60a5fa;
+}
+.modal-close {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+.modal-close:hover { color: #e2e8f0; background: none; }
+.modal-subtitle {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 12px;
+}
+.modal-subtitle .active-count { color: #f97316; font-weight: 700; }
+.modal-subtitle .total-count { color: #94a3b8; }
+.neuron-list {
+    overflow-y: auto;
+    flex: 1;
+    max-height: 55vh;
+}
+.neuron-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.neuron-table th {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #334155;
+    color: #94a3b8;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    background: #111827;
+}
+.neuron-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #1e293b;
+    color: #e2e8f0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 11px;
+}
+.neuron-table tr.neuron-active td {
+    color: #f97316;
+    font-weight: 600;
+}
+.neuron-table tr.neuron-active td:first-child::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #f97316;
+    margin-right: 6px;
+    animation: pulse 1s infinite;
+}
+.neuron-table tr:not(.neuron-active) td:first-child::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #334155;
+    margin-right: 6px;
+}
+</style>
+</head>
+<body>
+<div class="layout">
+    <!-- Left Panel: Controls -->
+    <div class="panel panel-left">
+        <h1>FlyWire Simulator</h1>
+        <div id="status-bar">
+            <span class="status-dot disconnected" id="status-dot"></span>
+            <span id="status-text">Connecting...</span>
+        </div>
+
+        <h2>Simulation</h2>
+        <div class="btn-group">
+            <button id="btn-play" onclick="sendCmd('start')">Play</button>
+            <button id="btn-pause" onclick="sendCmd('pause')">Pause</button>
+            <button id="btn-step" onclick="sendCmd('step')">Step</button>
+        </div>
+
+        <label>Batch size (steps per frame)</label>
+        <div class="slider-row">
+            <input type="range" id="batch-size" min="10" max="200" value="50" step="10"
+                   oninput="updateSlider(this, 'batch-val'); sendParam('batch_size', this.value)">
+            <span class="slider-val" id="batch-val">50</span>
+        </div>
+
+        <label>Noise amplitude</label>
+        <div class="slider-row">
+            <input type="range" id="noise-amp" min="0" max="1.0" value="0.4" step="0.05"
+                   oninput="updateSlider(this, 'noise-val'); sendParam('noise_amp', this.value)">
+            <span class="slider-val" id="noise-val">0.40</span>
+        </div>
+
+        <h2>Data Toggles</h2>
+        <div style="font-size:11px; line-height:2;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+                <input type="checkbox" id="tog-3d" checked
+                       onchange="sendParam('send_active_indices', this.checked ? 1 : 0)">
+                3D brain data
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+                <input type="checkbox" id="tog-heatmap" checked
+                       onchange="sendParam('send_group_rates', this.checked ? 1 : 0)">
+                Heatmap data
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
+                <input type="checkbox" id="tog-motor" checked
+                       onchange="sendParam('send_motor_rates', this.checked ? 1 : 0)">
+                Motor output data
+            </label>
+        </div>
+
+        <h2>Stimulus — click to apply</h2>
+        <div class="stim-body-map" id="stim-body-map"></div>
+
+        <label>Amplitude</label>
+        <div class="slider-row">
+            <input type="range" id="stim-amp" min="0.1" max="5.0" value="0.5" step="0.1"
+                   oninput="updateSlider(this, 'amp-val')">
+            <span class="slider-val" id="amp-val">0.50</span>
+        </div>
+
+        <div class="btn-group" style="margin-top: 6px;">
+            <button class="clear" onclick="clearStimulus()">Clear Stimulus</button>
+        </div>
+
+        <p id="stim-status" style="font-size:11px; color:#64748b; margin-top:4px;"></p>
+
+        <details style="margin-top:8px;">
+            <summary style="font-size:11px; color:#64748b; cursor:pointer;">Advanced: custom range</summary>
+            <label>Start index</label>
+            <input type="number" id="stim-start" value="0" min="0">
+            <label>End index</label>
+            <input type="number" id="stim-end" value="1000" min="0">
+            <button class="inject" style="margin-top:6px;" onclick="injectCustomStimulus()">Inject Custom</button>
+        </details>
+
+        <h2>Metrics</h2>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Step</span>
+            <span class="metric-value" id="m-step">0</span>
+        </div></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Firing Rate</span>
+            <span class="metric-value rate" id="m-rate">0%</span>
+        </div></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Spikes / batch</span>
+            <span class="metric-value" id="m-spikes">0</span>
+        </div></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Mean V</span>
+            <span class="metric-value voltage" id="m-voltage">0.000</span>
+        </div></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Steps/sec</span>
+            <span class="metric-value speed" id="m-sps">0</span>
+        </div></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">vs Real-time</span>
+            <span class="metric-value speed" id="m-realtime">0x</span>
+        </div></div>
+    </div>
+
+    <!-- Center Panel: Tabbed Charts + 3D Brain -->
+    <div class="panel panel-center">
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('charts')">Charts</button>
+            <button class="tab-btn" onclick="switchTab('brain3d')">3D Brain</button>
+        </div>
+
+        <div class="tab-content active" id="tab-charts">
+            <div class="chart-container">
+                <div id="heatmap"></div>
+                <div id="timeseries"></div>
+                <div class="fly-container" id="fly-container"></div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="tab-brain3d">
+            <div id="brain-container">
+                <div id="brain-info">Loading 3D brain...</div>
+                <div id="brain-legend"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Panel: Fly Body + Motor Output -->
+    <div class="panel panel-right">
+        <h2>Drosophila Body</h2>
+        <p style="font-size:11px; color:#64748b; margin-bottom:8px;">
+            Click body parts to stimulate. Orange = motor output activity.
+        </p>
+        <div id="fly-body-svg-container" style="width:100%; height:280px;"></div>
+
+        <h2>Motor Output</h2>
+        <p style="font-size:10px; color:#475569; margin-bottom:4px;">Click cards to see active neurons</p>
+        <div class="motor-grid" id="motor-grid"></div>
+
+        <h2 style="margin-top:12px;">Network</h2>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Neurons</span>
+            <span class="metric-value" id="m-neurons" style="font-size:14px;">-</span>
+        </div></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Synapses</span>
+            <span class="metric-value" id="m-synapses" style="font-size:14px;">-</span>
+        </div></div>
+    </div>
+</div>
+
+<!-- Motor Detail Modal -->
+<div class="modal-overlay" id="motor-modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <span class="modal-title" id="modal-group-name">Motor Group</span>
+            <button class="modal-close" onclick="closeMotorModal()">&times;</button>
+        </div>
+        <div class="modal-subtitle" id="modal-subtitle"></div>
+        <div class="neuron-list">
+            <table class="neuron-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Neuron Index</th>
+                        <th>Root ID</th>
+                    </tr>
+                </thead>
+                <tbody id="modal-neuron-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// ---- State ----
+let ws = null;
+let running = false;
+const spikeHistory = [];
+const groupRatesHistory = [];
+const MAX_HISTORY = 200;
+let groupLabels = [];
+let bodyInfo = null;
+let activeStimulus = null;
+let currentTab = 'charts';
+let lastActiveIndices = [];
+
+// ---- 3D Brain State ----
+let brainScene, brainCamera, brainRenderer, brainControls;
+let brainPoints = null;      // base point cloud (all neurons, dim colors)
+let brainGlowPoints = null;  // glow overlay (active neurons only, larger + additive)
+let brainPositions = null;   // Float32Array [N*3]
+let brainBaseColors = null;  // Float32Array [N*3]
+let brainGlowColors = null;  // Float32Array [N*3] for glow layer
+let brainClassLabels = null;
+let brainN = 0;
+let brainInitialized = false;
+let brainAnimating = false;
+
+// Class colors — pink / cyan-blue futuristic palette
+const CLASS_COLORS = [
+    [0.85, 0.25, 0.55],  // sensory - hot pink
+    [0.10, 0.70, 0.95],  // ascending - cyan-blue
+    [0.75, 0.18, 0.70],  // optic - magenta-purple
+    [0.60, 0.15, 0.50],  // central - deep plum
+    [0.20, 0.55, 0.90],  // visual_projection - blue
+    [0.90, 0.35, 0.65],  // visual_centrifugal - rose-pink
+    [0.15, 0.80, 0.85],  // descending - teal cyan
+    [0.70, 0.20, 0.60],  // motor - purple
+    [0.30, 0.65, 0.95],  // endocrine - sky cyan
+    [0.95, 0.40, 0.70],  // extra - pink
+];
+const GLOW_COLOR = [0.2, 0.85, 1.0]; // bright cyan glow for active neurons
+const DIM_ALPHA = 0.5; // base color intensity on dark bg
+
+// ---- Tab switching ----
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+    if (tab === 'charts') {
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+        document.getElementById('tab-charts').classList.add('active');
+        // Resize plotly charts
+        setTimeout(() => {
+            if (heatmapInitialized) Plotly.Plots.resize('heatmap');
+            if (timeseriesInitialized) Plotly.Plots.resize('timeseries');
+        }, 50);
+    } else {
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        document.getElementById('tab-brain3d').classList.add('active');
+        if (!brainInitialized) {
+            initBrain3D();
+        } else {
+            onBrainResize();
+        }
+        if (!brainAnimating) startBrainAnimation();
+    }
+}
+
+// ---- 3D Brain ----
+const MAX_GLOW = 5000;  // max active neurons to display in glow layer
+
+function initBrain3D() {
+    const container = document.getElementById('brain-container');
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+
+    brainScene = new THREE.Scene();
+    brainScene.background = new THREE.Color(0x050510);
+
+    brainCamera = new THREE.PerspectiveCamera(50, w / h, 0.01, 100);
+    brainCamera.position.set(0, 0, 2.5);
+
+    brainRenderer = new THREE.WebGLRenderer({ antialias: true });
+    brainRenderer.setSize(w, h);
+    brainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(brainRenderer.domElement);
+
+    brainControls = new THREE.OrbitControls(brainCamera, brainRenderer.domElement);
+    brainControls.enableDamping = true;
+    brainControls.dampingFactor = 0.1;
+    brainControls.rotateSpeed = 0.8;
+    brainControls.autoRotate = true;
+    brainControls.autoRotateSpeed = 0.5;
+
+    brainInitialized = true;
+
+    // Fetch positions
+    fetch('/api/positions')
+        .then(r => r.json())
+        .then(data => {
+            brainN = data.n_neurons;
+            document.getElementById('brain-info').innerHTML =
+                `${brainN.toLocaleString()} neurons<br>Drag to rotate | Scroll to zoom`;
+
+            // Decode positions from base64
+            if (data.positions_b64) {
+                const raw = atob(data.positions_b64);
+                const buf = new ArrayBuffer(raw.length);
+                const view = new Uint8Array(buf);
+                for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+                brainPositions = new Float32Array(buf); // [N*3]
+
+                // Uniform normalization (center + scale to [-1,1] by largest axis)
+                // then proportional Z stretch to fix FAFB voxel anisotropy (4x4x40nm)
+                let mnX = Infinity, mxX = -Infinity;
+                let mnY = Infinity, mxY = -Infinity;
+                let mnZ = Infinity, mxZ = -Infinity;
+                for (let i = 0; i < brainPositions.length; i += 3) {
+                    const x = brainPositions[i], y = brainPositions[i+1], z = brainPositions[i+2];
+                    if (x < mnX) mnX = x; if (x > mxX) mxX = x;
+                    if (y < mnY) mnY = y; if (y > mxY) mxY = y;
+                    if (z < mnZ) mnZ = z; if (z > mxZ) mxZ = z;
+                }
+                const cX = (mnX + mxX) / 2, cY = (mnY + mxY) / 2, cZ = (mnZ + mxZ) / 2;
+                const rangeX = (mxX - mnX) / 2 || 1;
+                const rangeY = (mxY - mnY) / 2 || 1;
+                const rangeZ = (mxZ - mnZ) / 2 || 1;
+                const uniformScale = Math.max(rangeX, rangeY, rangeZ);
+                const Z_STRETCH = 3.5; // compensate for flattened Z in voxel coords
+                for (let i = 0; i < brainPositions.length; i += 3) {
+                    brainPositions[i]     = (brainPositions[i]     - cX) / uniformScale;
+                    brainPositions[i + 1] = (brainPositions[i + 1] - cY) / uniformScale;
+                    brainPositions[i + 2] = (brainPositions[i + 2] - cZ) / uniformScale * Z_STRETCH;
+                }
+            } else {
+                brainPositions = new Float32Array(brainN * 3);
+                for (let i = 0; i < brainN * 3; i++) brainPositions[i] = (Math.random() - 0.5) * 2;
+            }
+
+            // Decode class colors
+            brainBaseColors = new Float32Array(brainN * 3);
+            if (data.classes && data.classes.ids_b64) {
+                brainClassLabels = data.classes.labels;
+                const rawIds = atob(data.classes.ids_b64);
+                const classIds = new Uint8Array(rawIds.length);
+                for (let i = 0; i < rawIds.length; i++) classIds[i] = rawIds.charCodeAt(i);
+
+                for (let i = 0; i < brainN; i++) {
+                    const cid = classIds[i] || 0;
+                    const c = CLASS_COLORS[cid % CLASS_COLORS.length];
+                    brainBaseColors[i * 3]     = c[0] * DIM_ALPHA;
+                    brainBaseColors[i * 3 + 1] = c[1] * DIM_ALPHA;
+                    brainBaseColors[i * 3 + 2] = c[2] * DIM_ALPHA;
+                }
+                buildBrainLegend(brainClassLabels);
+            } else {
+                for (let i = 0; i < brainN * 3; i++) brainBaseColors[i] = 0.15;
+            }
+
+            // --- Base layer: all neurons, dim colors, small points ---
+            const baseGeom = new THREE.BufferGeometry();
+            baseGeom.setAttribute('position', new THREE.BufferAttribute(brainPositions, 3));
+            baseGeom.setAttribute('color', new THREE.BufferAttribute(brainBaseColors, 3));
+            const baseMat = new THREE.PointsMaterial({
+                size: 0.007,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.85,
+                depthWrite: false,
+            });
+            brainPoints = new THREE.Points(baseGeom, baseMat);
+            brainScene.add(brainPoints);
+
+            // --- Glow layer: active neurons, larger + additive blending ---
+            const glowPos = new Float32Array(MAX_GLOW * 3);
+            brainGlowColors = new Float32Array(MAX_GLOW * 3);
+            const glowGeom = new THREE.BufferGeometry();
+            glowGeom.setAttribute('position', new THREE.BufferAttribute(glowPos, 3));
+            glowGeom.setAttribute('color', new THREE.BufferAttribute(brainGlowColors, 3));
+            glowGeom.setDrawRange(0, 0); // initially hidden
+            const glowMat = new THREE.PointsMaterial({
+                size: 0.045,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending,
+            });
+            brainGlowPoints = new THREE.Points(glowGeom, glowMat);
+            brainScene.add(brainGlowPoints);
+
+            startBrainAnimation();
+        })
+        .catch(err => {
+            document.getElementById('brain-info').textContent = 'Failed to load positions: ' + err;
+        });
+}
+
+function buildBrainLegend(labels) {
+    const container = document.getElementById('brain-legend');
+    container.innerHTML = '';
+    labels.forEach((label, i) => {
+        const c = CLASS_COLORS[i % CLASS_COLORS.length];
+        const item = document.createElement('span');
+        item.className = 'legend-item';
+        const dot = document.createElement('span');
+        dot.className = 'legend-dot';
+        dot.style.backgroundColor = `rgb(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)})`;
+        item.appendChild(dot);
+        item.appendChild(document.createTextNode(label));
+        container.appendChild(item);
+    });
+}
+
+function updateBrainActivity(activeIndices) {
+    if (!brainGlowPoints || !brainPositions) return;
+
+    const glowPosAttr = brainGlowPoints.geometry.attributes.position;
+    const glowColAttr = brainGlowPoints.geometry.attributes.color;
+    const glowPos = glowPosAttr.array;
+    const glowCol = glowColAttr.array;
+
+    let count = 0;
+    if (activeIndices && activeIndices.length > 0) {
+        const limit = Math.min(activeIndices.length, MAX_GLOW);
+        for (let j = 0; j < limit; j++) {
+            const idx = activeIndices[j];
+            if (idx >= 0 && idx < brainN) {
+                glowPos[count * 3]     = brainPositions[idx * 3];
+                glowPos[count * 3 + 1] = brainPositions[idx * 3 + 1];
+                glowPos[count * 3 + 2] = brainPositions[idx * 3 + 2];
+                glowCol[count * 3]     = GLOW_COLOR[0];
+                glowCol[count * 3 + 1] = GLOW_COLOR[1];
+                glowCol[count * 3 + 2] = GLOW_COLOR[2];
+                count++;
+            }
+        }
+    }
+
+    brainGlowPoints.geometry.setDrawRange(0, count);
+    glowPosAttr.needsUpdate = true;
+    glowColAttr.needsUpdate = true;
+}
+
+function startBrainAnimation() {
+    if (brainAnimating) return;
+    brainAnimating = true;
+    function animate() {
+        if (!brainAnimating) return;
+        requestAnimationFrame(animate);
+        if (brainControls) brainControls.update();
+        if (brainRenderer && brainScene && brainCamera) {
+            brainRenderer.render(brainScene, brainCamera);
+        }
+    }
+    animate();
+}
+
+function onBrainResize() {
+    if (!brainRenderer || !brainCamera) return;
+    const container = document.getElementById('brain-container');
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    brainCamera.aspect = w / h;
+    brainCamera.updateProjectionMatrix();
+    brainRenderer.setSize(w, h);
+}
+
+// ---- Mini Stimulus Body Map (left panel) ----
+function buildStimulusMap() {
+    const container = document.getElementById('stim-body-map');
+    // Compact fly diagram: 230 x 190
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 230 195');
+    svg.style.width = '100%';
+
+    const zones = [
+        // [id, stimName, shape, shapeAttrs, iconX, iconY, icon, labelX, labelY, label]
+        ['sz-ant-l', 'Tickle (left antenna)', 'ellipse', {cx:70, cy:20, rx:28, ry:13}, 70, 18, '', 70, 30, 'L Antenna'],
+        ['sz-ant-r', 'Tickle (right antenna)', 'ellipse', {cx:160, cy:20, rx:28, ry:13}, 160, 18, '', 160, 30, 'R Antenna'],
+        ['sz-odor-l', 'Odor (left antenna)', 'ellipse', {cx:42, cy:42, rx:22, ry:10}, 42, 40, '', 42, 51, 'Odor L'],
+        ['sz-odor-r', 'Odor (right antenna)', 'ellipse', {cx:188, cy:42, rx:22, ry:10}, 188, 40, '', 188, 51, 'Odor R'],
+        ['sz-eye-l', 'Light (left eye)', 'ellipse', {cx:82, cy:60, rx:20, ry:14}, 82, 58, '', 82, 72, 'L Eye'],
+        ['sz-eye-r', 'Light (right eye)', 'ellipse', {cx:148, cy:60, rx:20, ry:14}, 148, 58, '', 148, 72, 'R Eye'],
+        ['sz-proboscis', 'Sugar (proboscis)', 'ellipse', {cx:115, cy:88, rx:30, ry:12}, 115, 86, '', 115, 98, 'Proboscis'],
+        ['sz-body-l', 'Touch (left leg/body)', 'rect', {x:20, y:108, width:80, height:36, rx:6}, 60, 124, '', 60, 138, 'Touch L'],
+        ['sz-body-r', 'Touch (right leg/body)', 'rect', {x:130, y:108, width:80, height:36, rx:6}, 170, 124, '', 170, 138, 'Touch R'],
+        ['sz-odor-both', 'Odor (both antennae)', 'rect', {x:70, y:152, width:90, height:28, rx:6}, 115, 164, '', 115, 176, 'Odor Both'],
+    ];
+
+    // Body outline (decorative)
+    const outline = document.createElementNS(svgNS, 'path');
+    outline.setAttribute('d', 'M115,45 Q85,42 75,55 Q65,70 80,80 Q95,88 115,92 Q135,88 150,80 Q165,70 155,55 Q145,42 115,45');
+    outline.setAttribute('fill', 'none');
+    outline.setAttribute('stroke', '#1e293b');
+    outline.setAttribute('stroke-width', '0.8');
+    outline.setAttribute('opacity', '0.4');
+    svg.appendChild(outline);
+
+    zones.forEach(([id, stimName, shape, attrs, ix, iy, icon, lx, ly, label]) => {
+        const g = document.createElementNS(svgNS, 'g');
+        g.setAttribute('class', 'stim-zone');
+        g.setAttribute('id', id);
+        g.addEventListener('click', () => applyStimFromMap(stimName, id));
+
+        const el = document.createElementNS(svgNS, shape);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        g.appendChild(el);
+
+        if (icon) {
+            const ic = document.createElementNS(svgNS, 'text');
+            ic.setAttribute('x', ix); ic.setAttribute('y', iy);
+            ic.setAttribute('class', 'stim-zone-icon');
+            ic.textContent = icon;
+            g.appendChild(ic);
+        }
+
+        const txt = document.createElementNS(svgNS, 'text');
+        txt.setAttribute('x', lx); txt.setAttribute('y', ly);
+        txt.setAttribute('class', 'stim-zone-label');
+        txt.textContent = label;
+        g.appendChild(txt);
+
+        svg.appendChild(g);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(svg);
+}
+
+function applyStimFromMap(stimName, zoneId) {
+    const amp = parseFloat(document.getElementById('stim-amp').value);
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({cmd: 'stimulus_preset', name: stimName, amplitude: amp}));
+        activeStimulus = stimName;
+        document.getElementById('stim-status').textContent = 'Active: ' + stimName;
+
+        // Highlight active zone
+        document.querySelectorAll('.stim-zone').forEach(z => z.classList.remove('stim-active'));
+        const zone = document.getElementById(zoneId);
+        if (zone) zone.classList.add('stim-active');
+
+        // Also highlight right-panel fly
+        highlightStimulated(stimName);
+    }
+}
+
+function injectCustomStimulus() {
+    const amp = parseFloat(document.getElementById('stim-amp').value);
+    const start = parseInt(document.getElementById('stim-start').value) || 0;
+    const end = parseInt(document.getElementById('stim-end').value) || 1000;
+    const indices = [];
+    for (let i = start; i < end; i++) indices.push(i);
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({cmd: 'stimulus', indices, amplitude: amp}));
+        activeStimulus = `Custom ${start}-${end}`;
+        document.getElementById('stim-status').textContent = 'Active: ' + activeStimulus;
+    }
+}
+
+// ---- Fly Body SVG ----
+function createFlySVG(container, info) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 300 320');
+    svg.setAttribute('class', 'fly-svg');
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+
+    const sensory = (info && info.sensory) || {};
+    const motor = (info && info.motor) || {};
+
+    function n(key) { return (sensory[key] || motor[key] || 0).toLocaleString(); }
+
+    function addPart(tag, attrs, id, label, count, stimName) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        el.setAttribute('class', 'fly-part');
+        el.setAttribute('id', 'fly-' + id);
+        if (stimName) {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', () => stimulateBodyPart(stimName));
+        }
+        svg.appendChild(el);
+
+        if (label) {
+            const [lx, ly] = attrs._label || [parseFloat(attrs.cx || attrs.x || 0), parseFloat(attrs.cy || attrs.y || 0)];
+            const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            txt.setAttribute('x', lx); txt.setAttribute('y', ly);
+            txt.setAttribute('class', 'fly-label');
+            txt.textContent = label;
+            svg.appendChild(txt);
+            if (count !== undefined) {
+                const ct = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                ct.setAttribute('x', lx); ct.setAttribute('y', ly + 9);
+                ct.setAttribute('class', 'fly-count');
+                ct.setAttribute('id', 'flyc-' + id);
+                ct.textContent = count;
+                svg.appendChild(ct);
+            }
+        }
+    }
+
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    title.setAttribute('x', 150); title.setAttribute('y', 14);
+    title.setAttribute('class', 'fly-label');
+    title.setAttribute('font-size', '9');
+    title.setAttribute('fill', '#60a5fa');
+    title.textContent = 'Drosophila melanogaster';
+    svg.appendChild(title);
+
+    // Antennae
+    addPart('path', {
+        d: 'M120,50 Q100,25 90,20 Q85,18 88,22 Q95,30 115,52',
+        fill: 'none', stroke: '#475569', 'stroke-width': 4,
+        _label: [80, 18]
+    }, 'ant_l', 'L Antenna', `${n('antenna_mech_left')}+${n('antenna_olf_left')}`,
+    'Tickle (left antenna)');
+
+    addPart('path', {
+        d: 'M180,50 Q200,25 210,20 Q215,18 212,22 Q205,30 185,52',
+        fill: 'none', stroke: '#475569', 'stroke-width': 4,
+        _label: [220, 18]
+    }, 'ant_r', 'R Antenna', `${n('antenna_mech_right')}+${n('antenna_olf_right')}`,
+    'Tickle (right antenna)');
+
+    // Head
+    addPart('ellipse', {
+        cx: 150, cy: 65, rx: 40, ry: 22, _label: [150, 68]
+    }, 'head', 'Head', '', null);
+
+    // Eyes
+    addPart('ellipse', {
+        cx: 118, cy: 60, rx: 14, ry: 18, _label: [105, 55]
+    }, 'eye_l', 'L Eye', n('eye_left'), 'Light (left eye)');
+
+    addPart('ellipse', {
+        cx: 182, cy: 60, rx: 14, ry: 18, _label: [195, 55]
+    }, 'eye_r', 'R Eye', n('eye_right'), 'Light (right eye)');
+
+    // Proboscis
+    addPart('path', {
+        d: 'M143,87 Q140,100 142,110 Q145,115 148,115 Q152,115 155,110 Q157,100 155,87',
+        _label: [148, 120]
+    }, 'proboscis', 'Proboscis', `${n('proboscis_gust')} sens / ${n('motor_proboscis')} motor`,
+    'Sugar (proboscis)');
+
+    // Thorax
+    addPart('ellipse', {
+        cx: 150, cy: 145, rx: 45, ry: 35, _label: [150, 148]
+    }, 'thorax', 'Thorax', '', null);
+
+    // Wings
+    addPart('path', {
+        d: 'M105,135 Q55,120 40,145 Q35,160 60,165 Q85,168 105,155',
+        _label: [60, 150]
+    }, 'wing_l', 'L Wing', '', null);
+
+    addPart('path', {
+        d: 'M195,135 Q245,120 260,145 Q265,160 240,165 Q215,168 195,155',
+        _label: [240, 150]
+    }, 'wing_r', 'R Wing', '', null);
+
+    // Abdomen
+    addPart('path', {
+        d: 'M115,175 Q110,200 112,230 Q115,260 130,275 Q140,282 150,285 Q160,282 170,275 Q185,260 188,230 Q190,200 185,175',
+        _label: [150, 240]
+    }, 'abdomen', 'Abdomen', '', null);
+
+    // Legs
+    addPart('path', {
+        d: 'M115,125 Q85,105 65,95 Q55,90 50,95 Q48,100 55,102 Q70,108 90,120',
+        fill: 'none', stroke: '#475569', 'stroke-width': 3,
+        _label: [42, 92]
+    }, 'leg_fl', 'FL', n('body_left'), 'Touch (left leg/body)');
+
+    addPart('path', {
+        d: 'M185,125 Q215,105 235,95 Q245,90 250,95 Q252,100 245,102 Q230,108 210,120',
+        fill: 'none', stroke: '#475569', 'stroke-width': 3,
+        _label: [258, 92]
+    }, 'leg_fr', 'FR', n('body_right'), 'Touch (right leg/body)');
+
+    addPart('path', {
+        d: 'M108,150 Q75,155 50,160 Q38,162 35,168 Q34,173 40,172 Q58,168 80,160',
+        fill: 'none', stroke: '#475569', 'stroke-width': 3,
+        _label: [28, 168]
+    }, 'leg_ml', 'ML', '', 'Touch (left leg/body)');
+
+    addPart('path', {
+        d: 'M192,150 Q225,155 250,160 Q262,162 265,168 Q266,173 260,172 Q242,168 220,160',
+        fill: 'none', stroke: '#475569', 'stroke-width': 3,
+        _label: [272, 168]
+    }, 'leg_mr', 'MR', '', 'Touch (right leg/body)');
+
+    addPart('path', {
+        d: 'M115,178 Q85,195 60,215 Q48,222 45,228 Q44,234 50,231 Q65,220 90,200',
+        fill: 'none', stroke: '#475569', 'stroke-width': 3,
+        _label: [36, 232]
+    }, 'leg_hl', 'HL', '', 'Touch (left leg/body)');
+
+    addPart('path', {
+        d: 'M185,178 Q215,195 240,215 Q252,222 255,228 Q256,234 250,231 Q235,220 210,200',
+        fill: 'none', stroke: '#475569', 'stroke-width': 3,
+        _label: [264, 232]
+    }, 'leg_hr', 'HR', '', 'Touch (right leg/body)');
+
+    // Descending neuron labels
+    const descL = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    descL.setAttribute('x', 130); descL.setAttribute('y', 165);
+    descL.setAttribute('class', 'fly-count');
+    descL.setAttribute('id', 'flyc-desc-l');
+    descL.textContent = `desc L: ${n('descending_left')}`;
+    svg.appendChild(descL);
+
+    const descR = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    descR.setAttribute('x', 170); descR.setAttribute('y', 165);
+    descR.setAttribute('class', 'fly-count');
+    descR.setAttribute('id', 'flyc-desc-r');
+    descR.textContent = `desc R: ${n('descending_right')}`;
+    svg.appendChild(descR);
+
+    container.innerHTML = '';
+    container.appendChild(svg);
+}
+
+function stimulateBodyPart(stimName) {
+    const amp = parseFloat(document.getElementById('stim-amp').value);
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({cmd: 'stimulus_preset', name: stimName, amplitude: amp}));
+        activeStimulus = stimName;
+        document.getElementById('stim-status').textContent = `Active: ${stimName}`;
+        highlightStimulated(stimName);
+    }
+}
+
+function highlightStimulated(stimName) {
+    document.querySelectorAll('.fly-part').forEach(el => el.classList.remove('stimulated'));
+
+    const mapping = {
+        'Tickle (left antenna)': ['fly-ant_l'],
+        'Tickle (right antenna)': ['fly-ant_r'],
+        'Light (left eye)': ['fly-eye_l'],
+        'Light (right eye)': ['fly-eye_r'],
+        'Sugar (proboscis)': ['fly-proboscis'],
+        'Sugar (left proboscis)': ['fly-proboscis'],
+        'Sugar (right proboscis)': ['fly-proboscis'],
+        'Touch (left leg/body)': ['fly-leg_fl', 'fly-leg_ml', 'fly-leg_hl'],
+        'Touch (right leg/body)': ['fly-leg_fr', 'fly-leg_mr', 'fly-leg_hr'],
+        'Odor (left antenna)': ['fly-ant_l'],
+        'Odor (right antenna)': ['fly-ant_r'],
+        'Odor (both antennae)': ['fly-ant_l', 'fly-ant_r'],
+    };
+    const ids = mapping[stimName] || [];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('stimulated');
+    });
+}
+
+function updateFlyMotorColors(motorRates) {
+    if (!motorRates) return;
+
+    const motorToFly = {
+        'motor_proboscis': ['fly-proboscis'],
+        'motor_antenna': ['fly-ant_l', 'fly-ant_r'],
+        'motor_neck': ['fly-head'],
+        'motor_eye': ['fly-eye_l', 'fly-eye_r'],
+        'descending_left': ['fly-leg_fl', 'fly-leg_ml', 'fly-leg_hl', 'fly-wing_l'],
+        'descending_right': ['fly-leg_fr', 'fly-leg_mr', 'fly-leg_hr', 'fly-wing_r'],
+    };
+
+    for (const [group, partIds] of Object.entries(motorToFly)) {
+        const rate = motorRates[group] || 0;
+        const intensity = Math.min(rate / 0.08, 1.0);
+        partIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (intensity > 0.01) {
+                const r = Math.round(30 + 225 * intensity);
+                const g = Math.round(41 + 80 * intensity);
+                const b = Math.round(59 - 30 * intensity);
+                el.style.fill = `rgb(${r},${g},${b})`;
+                if (el.tagName === 'path') {
+                    el.style.stroke = `rgb(${r},${g},${b})`;
+                    el.style.fill = 'none';
+                }
+            } else {
+                el.style.fill = '#1e293b';
+                if (el.tagName === 'path') {
+                    el.style.stroke = '#475569';
+                    el.style.fill = 'none';
+                }
+            }
+        });
+    }
+}
+
+function buildMotorGrid(info) {
+    const grid = document.getElementById('motor-grid');
+    if (!info || !info.motor) return;
+
+    const motorDefs = [
+        {key: 'motor_proboscis', name: 'Proboscis', desc: 'Extension'},
+        {key: 'motor_pharynx', name: 'Pharynx', desc: 'Swallowing'},
+        {key: 'motor_antenna', name: 'Antennae', desc: 'Movement'},
+        {key: 'motor_neck', name: 'Neck', desc: 'Head turn'},
+        {key: 'motor_eye', name: 'Ocelli', desc: 'Eye adjust'},
+        {key: 'descending_left', name: 'Desc. Left', desc: 'Body L'},
+        {key: 'descending_right', name: 'Desc. Right', desc: 'Body R'},
+        {key: 'descending_center', name: 'Desc. Center', desc: 'Bilateral'},
+    ];
+
+    grid.innerHTML = '';
+    motorDefs.forEach(m => {
+        const count = info.motor[m.key] || 0;
+        if (count === 0) return;
+        const card = document.createElement('div');
+        card.className = 'motor-card';
+        card.id = 'motor-card-' + m.key;
+        card.innerHTML = `
+            <div class="motor-name">${m.name}</div>
+            <div class="motor-rate" id="mr-${m.key}">0%</div>
+            <div class="motor-count">${count} neurons</div>
+            <div class="motor-bar"><div class="motor-bar-fill" id="mb-${m.key}"></div></div>
+            <div class="motor-click-hint">click for detail</div>
+        `;
+        card.addEventListener('click', () => requestMotorDetail(m.key, m.name));
+        grid.appendChild(card);
+    });
+}
+
+function updateMotorGrid(motorRates) {
+    if (!motorRates) return;
+    for (const [key, rate] of Object.entries(motorRates)) {
+        const rateEl = document.getElementById('mr-' + key);
+        const barEl = document.getElementById('mb-' + key);
+        const cardEl = document.getElementById('motor-card-' + key);
+        if (rateEl) rateEl.textContent = (rate * 100).toFixed(1) + '%';
+        if (barEl) {
+            const pct = Math.min(rate / 0.08 * 100, 100);
+            barEl.style.width = pct + '%';
+            if (pct > 50) barEl.style.background = '#f97316';
+            else if (pct > 20) barEl.style.background = '#eab308';
+            else barEl.style.background = '#3b82f6';
+        }
+        if (cardEl) {
+            cardEl.classList.toggle('active', rate > 0.005);
+        }
+    }
+}
+
+// ---- Motor Detail Modal ----
+function requestMotorDetail(groupKey, displayName) {
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({cmd: 'motor_detail', group: groupKey}));
+        // Store the display name for when response arrives
+        document.getElementById('modal-group-name').textContent = displayName + ' Neurons';
+    }
+}
+
+function showMotorDetail(data) {
+    const modal = document.getElementById('motor-modal');
+    const tbody = document.getElementById('modal-neuron-tbody');
+    const subtitle = document.getElementById('modal-subtitle');
+
+    document.getElementById('modal-group-name').textContent =
+        (data.group || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + ' Neurons';
+
+    const neurons = data.neurons || [];
+    const activeCount = neurons.filter(n => n.active).length;
+    subtitle.innerHTML =
+        `<span class="active-count">${activeCount} active</span> / ` +
+        `<span class="total-count">${neurons.length} total</span> neurons`;
+
+    // Sort: active first, then by index
+    neurons.sort((a, b) => {
+        if (a.active !== b.active) return b.active ? 1 : -1;
+        return a.index - b.index;
+    });
+
+    tbody.innerHTML = '';
+    neurons.forEach(n => {
+        const tr = document.createElement('tr');
+        if (n.active) tr.className = 'neuron-active';
+        tr.innerHTML = `
+            <td>${n.active ? 'FIRING' : 'quiet'}</td>
+            <td>${n.index}</td>
+            <td>${n.root_id}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    modal.classList.add('visible');
+}
+
+function closeMotorModal() {
+    document.getElementById('motor-modal').classList.remove('visible');
+}
+
+// Close modal on overlay click
+document.getElementById('motor-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeMotorModal();
+});
+
+// Close modal on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeMotorModal();
+});
+
+// ---- WebSocket ----
+function connect() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+    ws.onopen = () => {
+        document.getElementById('status-dot').className = 'status-dot connected';
+        document.getElementById('status-text').textContent = 'Connected (paused)';
+    };
+
+    ws.onclose = () => {
+        document.getElementById('status-dot').className = 'status-dot disconnected';
+        document.getElementById('status-text').textContent = 'Disconnected';
+        running = false;
+        setTimeout(connect, 2000);
+    };
+
+    ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'metrics') {
+            updateMetrics(msg);
+        } else if (msg.type === 'init') {
+            if (msg.group_labels) groupLabels = msg.group_labels;
+            bodyInfo = msg.body_info;
+            document.getElementById('m-neurons').textContent = msg.n_neurons.toLocaleString();
+            document.getElementById('m-synapses').textContent = msg.n_synapses.toLocaleString();
+            createFlySVG(document.getElementById('fly-body-svg-container'), bodyInfo);
+            buildMotorGrid(bodyInfo);
+        } else if (msg.type === 'state') {
+            running = msg.running;
+            updateRunState();
+        } else if (msg.type === 'motor_detail') {
+            showMotorDetail(msg);
+        }
+    };
+}
+
+function sendCmd(cmd) {
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({cmd}));
+        if (cmd === 'start') { running = true; updateRunState(); }
+        if (cmd === 'pause') { running = false; updateRunState(); }
+    }
+}
+
+function sendParam(key, value) {
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({cmd: 'set_param', key, value: parseFloat(value)}));
+    }
+}
+
+function clearStimulus() {
+    sendCmd('clear_stimulus');
+    activeStimulus = null;
+    document.getElementById('stim-status').textContent = '';
+    document.querySelectorAll('.fly-part').forEach(el => el.classList.remove('stimulated'));
+    document.querySelectorAll('.stim-zone').forEach(z => z.classList.remove('stim-active'));
+}
+
+// populatePresets no longer needed — using visual body map instead
+
+function updateRunState() {
+    const dot = document.getElementById('status-dot');
+    const txt = document.getElementById('status-text');
+    const btnPlay = document.getElementById('btn-play');
+    const btnPause = document.getElementById('btn-pause');
+    if (running) {
+        dot.className = 'status-dot running';
+        txt.textContent = 'Running';
+        btnPlay.classList.add('active');
+        btnPause.classList.remove('active');
+    } else {
+        dot.className = 'status-dot paused';
+        txt.textContent = 'Paused';
+        btnPlay.classList.remove('active');
+        btnPause.classList.add('active');
+    }
+}
+
+function updateSlider(el, spanId) {
+    const span = document.getElementById(spanId);
+    span.textContent = parseFloat(el.value).toFixed(el.step.includes('.') ? 2 : 0);
+}
+
+// ---- Metrics update ----
+function updateMetrics(m) {
+    document.getElementById('m-step').textContent = m.step.toLocaleString();
+    document.getElementById('m-rate').textContent = (m.firing_rate * 100).toFixed(2) + '%';
+    document.getElementById('m-spikes').textContent = m.spike_count.toLocaleString();
+    document.getElementById('m-voltage').textContent = m.mean_voltage.toFixed(3);
+    document.getElementById('m-sps').textContent = Math.round(m.steps_per_sec).toLocaleString();
+
+    const realtime = m.steps_per_sec / 1000;
+    document.getElementById('m-realtime').textContent = realtime.toFixed(1) + 'x';
+
+    spikeHistory.push(m.spike_count);
+    if (spikeHistory.length > MAX_HISTORY) spikeHistory.shift();
+
+    // Accumulate group rates history locally (no longer sent from backend)
+    if (m.group_rates) {
+        groupRatesHistory.push(m.group_rates);
+        if (groupRatesHistory.length > MAX_HISTORY) groupRatesHistory.shift();
+    }
+    updateHeatmap(groupRatesHistory);
+    updateTimeseries();
+    updateFlyMotorColors(m.motor_rates);
+    updateMotorGrid(m.motor_rates);
+
+    // Update 3D brain if visible
+    if (m.active_indices) {
+        lastActiveIndices = m.active_indices;
+        if (currentTab === 'brain3d') {
+            updateBrainActivity(m.active_indices);
+        }
+    }
+}
+
+// ---- Charts ----
+const plotlyConfig = {displayModeBar: false, responsive: true};
+const darkLayout = {
+    paper_bgcolor: '#0a0e17',
+    plot_bgcolor: '#0f172a',
+    font: {color: '#94a3b8', size: 11},
+    margin: {l: 110, r: 20, t: 30, b: 40},
+};
+
+let heatmapInitialized = false;
+let timeseriesInitialized = false;
+
+function updateHeatmap(history) {
+    if (!history || history.length === 0) return;
+
+    const numGroups = history[0].length;
+    const z = [];
+    for (let g = 0; g < numGroups; g++) {
+        const row = [];
+        for (let t = 0; t < history.length; t++) {
+            row.push(history[t][g] * 100);
+        }
+        z.push(row);
+    }
+
+    const yLabels = groupLabels.length === numGroups
+        ? groupLabels
+        : Array.from({length: numGroups}, (_, g) => 'G' + g);
+
+    if (!heatmapInitialized) {
+        Plotly.newPlot('heatmap', [{
+            z: z,
+            y: yLabels,
+            type: 'heatmap',
+            colorscale: [
+                [0, '#0f172a'],
+                [0.2, '#1e3a5f'],
+                [0.4, '#2563eb'],
+                [0.6, '#7c3aed'],
+                [0.8, '#ec4899'],
+                [1.0, '#f97316']
+            ],
+            colorbar: {title: 'Rate %', titleside: 'right', thickness: 12, len: 0.9},
+            zmin: 0,
+            zmax: 10,
+            hoverongaps: false,
+        }], {
+            ...darkLayout,
+            title: {text: 'Firing Rate by Brain Region', font: {size: 13, color: '#60a5fa'}},
+            xaxis: {title: 'Batch'},
+            yaxis: {title: '', automargin: true},
+        }, plotlyConfig);
+        heatmapInitialized = true;
+    } else {
+        Plotly.restyle('heatmap', {z: [z], y: [yLabels]}, [0]);
+    }
+}
+
+function updateTimeseries() {
+    if (!timeseriesInitialized) {
+        Plotly.newPlot('timeseries', [{
+            y: spikeHistory,
+            type: 'scatter',
+            mode: 'lines',
+            line: {color: '#34d399', width: 1.5},
+            fill: 'tozeroy',
+            fillcolor: 'rgba(52, 211, 153, 0.1)',
+        }], {
+            ...darkLayout,
+            title: {text: 'Total Spikes per Batch', font: {size: 13, color: '#60a5fa'}},
+            xaxis: {title: 'Batch'},
+            yaxis: {title: 'Spikes'},
+            margin: {l: 60, r: 20, t: 30, b: 40},
+        }, plotlyConfig);
+        timeseriesInitialized = true;
+    } else {
+        Plotly.restyle('timeseries', {y: [spikeHistory]}, [0]);
+    }
+}
+
+// Init
+window.addEventListener('load', () => {
+    buildStimulusMap();
+    updateHeatmap([[0]]);
+    spikeHistory.push(0);
+    updateTimeseries();
+    spikeHistory.length = 0;
+    heatmapInitialized = false;
+    timeseriesInitialized = false;
+    connect();
+});
+
+window.addEventListener('resize', () => {
+    if (currentTab === 'charts') {
+        Plotly.Plots.resize('heatmap');
+        Plotly.Plots.resize('timeseries');
+    } else {
+        onBrainResize();
+    }
+});
+</script>
+</body>
+</html>

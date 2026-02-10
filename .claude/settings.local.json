@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:www.nature.com)",
+      "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
+      "WebFetch(domain:neuromorphiccore.ai)",
+      "WebFetch(domain:www.frontiersin.org)",
+      "Bash(dir:*)",
+      "WebFetch(domain:zenodo.org)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:codex.flywire.ai)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:fafbseg-py.readthedocs.io)",
+      "Bash(pip install:*)",
+      "Bash(export:*)",
+      "Bash(export PATH=\"$CUDA_PATH/bin/x64:$CUDA_PATH/bin:$PATH\")",
+      "WebFetch(domain:blog.flywire.ai)",
+      "WebFetch(domain:www.neuroai.science)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(powershell:*)",
+      "Bash(timeout:*)",
+      "Bash(CUDA_PATH=\"C:\\\\Program Files\\\\NVIDIA GPU Computing Toolkit\\\\CUDA\\\\v13.1\" PATH=\"C:\\\\Program Files\\\\NVIDIA GPU Computing Toolkit\\\\CUDA\\\\v13.1\\\\bin\\\\x64:$PATH\" python:*)",
+      "Bash(curl:*)",
+      "Bash(git -C \"C:\\\\Users\\\\micha\\\\Documents\\\\FastFly\" status)",
+      "Bash(gh auth:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
