@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastFly I/O Analysis</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0a0e17;
+    color: #e0e0e0;
+    padding: 20px;
+}
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #60a5fa;
+    margin-bottom: 24px;
+    letter-spacing: 0.5px;
+}
+h2 {
+    font-size: 18px;
+    font-weight: 500;
+    color: #93c5fd;
+    margin: 20px 0 12px 0;
+}
+.panel {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.input-group {
+    margin-bottom: 16px;
+}
+label {
+    display: block;
+    margin-bottom: 6px;
+    color: #cbd5e1;
+    font-size: 14px;
+}
+input[type="text"],
+input[type="number"],
+textarea {
+    width: 100%;
+    padding: 8px 12px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+}
+textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+button {
+    padding: 10px 20px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    margin-right: 10px;
+}
+button:hover {
+    background: #2563eb;
+}
+button:active {
+    background: #1d4ed8;
+}
+button:disabled {
+    background: #475569;
+    cursor: not-allowed;
+}
+button.secondary {
+    background: #475569;
+    margin-top: 8px;
+}
+button.secondary:hover {
+    background: #64748b;
+}
+.grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+}
+.modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.modal-content {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 800px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.modal-header h2 {
+    margin: 0;
+}
+.close-btn {
+    background: none;
+    color: #94a3b8;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+}
+.close-btn:hover {
+    color: #e0e0e0;
+    background: none;
+}
+.modal-search {
+    margin-bottom: 16px;
+}
+.modal-search input {
+    width: 100%;
+}
+.neuron-browser {
+    overflow-y: auto;
+    flex: 1;
+}
+.neuron-card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.neuron-card:hover {
+    background: #2d3b52;
+    border-color: #3b82f6;
+}
+.neuron-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.neuron-card-name {
+    font-weight: 600;
+    color: #60a5fa;
+    font-size: 14px;
+}
+.neuron-card-type {
+    font-size: 12px;
+    color: #94a3b8;
+}
+.neuron-card-desc {
+    font-size: 12px;
+    color: #cbd5e1;
+    margin-top: 4px;
+}
+.neuron-card-count {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+}
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+}
+.stat-box {
+    background: #1e293b;
+    padding: 12px;
+    border-radius: 4px;
+    border: 1px solid #334155;
+}
+.stat-label {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+.stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: #60a5fa;
+}
+.neuron-list {
+    max-height: 300px;
+    overflow-y: auto;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    padding: 12px;
+    margin-top: 12px;
+}
+.neuron-item {
+    display: grid;
+    grid-template-columns: 100px 1fr 1fr 1fr;
+    gap: 12px;
+    padding: 8px;
+    border-bottom: 1px solid #334155;
+    font-size: 13px;
+}
+.neuron-item:last-child {
+    border-bottom: none;
+}
+.neuron-header {
+    font-weight: 600;
+    color: #93c5fd;
+}
+.help-text {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+.error {
+    color: #ef4444;
+    padding: 12px;
+    background: #7f1d1d;
+    border-radius: 4px;
+    margin-top: 12px;
+}
+.success {
+    color: #10b981;
+    padding: 12px;
+    background: #064e3b;
+    border-radius: 4px;
+    margin-top: 12px;
+}
+#plotContainer {
+    margin-top: 20px;
+    height: 400px;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div style="margin-bottom: 12px;">
+        <a href="/" style="color: #60a5fa; text-decoration: none; font-size: 13px;">
+            ← Back to Main Simulator
+        </a>
+    </div>
+    <h1>FastFly Input/Output Analysis</h1>
+    <p style="color: #94a3b8; margin-bottom: 24px;">
+        Analyze signal propagation through the fly brain by specifying input neurons to stimulate and output neurons to monitor.<br>
+        <strong style="color: #60a5fa;">Input neurons:</strong> Specified by firing rate in Hz (spikes per second)<br>
+        <strong style="color: #60a5fa;">Output neurons:</strong> Tracked to measure their average firing rates<br>
+        <strong style="color: #60a5fa;">Neuron Selection:</strong> Use neuron names (DNa02_L, oDN1_R, etc.), FlyWire root IDs (18-digit), or indices (0-139254)<br>
+        <em style="color: #64748b; font-size: 12px;">Simulation timestep: 0.1 ms | Partial name matching supported (e.g., "DNa02" matches both DNa02_L and DNa02_R)</em>
+    </p>
+
+    <div class="grid-2">
+        <div class="panel">
+            <h2>Input Neurons (Stimulus)</h2>
+            <div class="input-group">
+                <label for="inputNeurons">Neuron IDs and Rates</label>
+                <textarea id="inputNeurons" placeholder="By neuron name:
+DNa02_L,100
+DNa02_R,50
+DNa02,100  (matches both DNa02_L and DNa02_R)
+
+By ID:
+720575940629327659,100
+
+Python list with names:
+[DNa02_L, oDN1_L],100
+
+Or use Browse Neuron Catalog button below!"></textarea>
+                <div class="help-text">
+                    Format 1: <code>neuron_name,rate_Hz</code> or <code>neuron_id,rate_Hz</code> (one per line)<br>
+                    Format 2: <code>[name1, name2, id3],rate_Hz</code> (Python list syntax)<br>
+                    Neuron names: DNa02_L, DNa02_R, oDN1_L, P9_R, etc. (partial match: "DNa02" → both L & R)<br>
+                    Firing rate in Hz (spikes/second). Common values: 10-200 Hz
+                </div>
+                <button class="secondary" onclick="openNeuronBrowser('input')">📋 Browse Neuron Catalog</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Output Neurons (Monitor)</h2>
+            <div class="input-group">
+                <label for="outputNeurons">Neuron IDs</label>
+                <textarea id="outputNeurons" placeholder="By neuron name:
+DNa02_L
+oDN1_R
+DNa02  (matches both DNa02_L and DNa02_R)
+
+By ID:
+720575940629327659, 720575940604737708
+
+Python list:
+[DNa02_L, DNa02_R, oDN1_L]
+
+Or use Browse Neuron Catalog button below!"></textarea>
+                <div class="help-text">
+                    Enter neuron names or IDs to track their firing rates<br>
+                    Neuron names: DNa02_L, oDN1_R, P9_L, etc. (partial match: "DNa02" → both L & R)<br>
+                    Or FlyWire root IDs (large numbers) or neuron indices (0-139254)<br>
+                    Formats: one-per-line, comma-separated, or Python list <code>[name1, name2, ...]</code>
+                </div>
+                <button class="secondary" onclick="openNeuronBrowser('output')">📋 Browse Neuron Catalog</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Simulation Parameters</h2>
+        <div class="grid-2">
+            <div class="input-group">
+                <label for="simTime">Simulation Time (ms)</label>
+                <input type="number" id="simTime" value="1000" min="1" max="10000" step="10">
+                <div class="help-text">Duration of simulation in milliseconds (1000 ms = 1 second)</div>
+            </div>
+            <div class="input-group">
+                <label for="batchSize">Batch Size</label>
+                <input type="number" id="batchSize" value="50" min="1" max="1000">
+                <div class="help-text">Steps per batch (affects performance)</div>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <button id="setupBtn" onclick="setupAnalysis()">1. Setup I/O Configuration</button>
+            <button id="runBtn" onclick="runAnalysis()" disabled>2. Run Simulation</button>
+            <button onclick="reset()">Reset</button>
+        </div>
+
+        <div id="statusMsg"></div>
+    </div>
+
+    <div class="panel" id="resultsPanel" style="display: none;">
+        <h2>Results</h2>
+        
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label">Simulation Time</div>
+                <div class="stat-value" id="stepsRun">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Mean Firing Rate (Hz)</div>
+                <div class="stat-value" id="meanRate">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Std Dev (Hz)</div>
+                <div class="stat-value" id="stdRate">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Min Rate (Hz)</div>
+                <div class="stat-value" id="minRate">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Max Rate (Hz)</div>
+                <div class="stat-value" id="maxRate">-</div>
+            </div>
+        </div>
+
+        <h2>Per-Neuron Firing Rates</h2>
+        <div id="plotContainer"></div>
+
+        <h2>Detailed Results</h2>
+        <div class="neuron-list">
+            <div class="neuron-item neuron-header">
+                <div>Neuron ID</div>
+                <div>Spike Count</div>
+                <div>Firing Rate (Hz)</div>
+                <div>Normalized</div>
+            </div>
+            <div id="neuronResults"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Neuron Browser Modal -->
+<div id="neuronModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Neuron Catalog</h2>
+            <button class="close-btn" onclick="closeNeuronBrowser()">&times;</button>
+        </div>
+        
+        <div class="modal-search">
+            <input type="text" id="neuronSearch" placeholder="Search by name, type, or description..." 
+                   oninput="filterNeurons()">
+        </div>
+        
+        <div class="neuron-browser" id="neuronBrowser">
+            <!-- Neuron cards will be populated here -->
+        </div>
+    </div>
+</div>
+
+<script>
+const DT_MS = 0.1;  // Simulation timestep in milliseconds
+const STEPS_TO_HZ = 1000.0 / DT_MS;  // Conversion factor: spikes/step -> Hz
+let setupComplete = false;
+let neuronCatalog = {};
+let currentBrowserMode = 'input'; // 'input' or 'output'
+
+// Load neuron catalog on page load
+async function loadNeuronCatalog() {
+    try {
+        const response = await fetch('/static/neurons.json');
+        neuronCatalog = await response.json();
+        console.log('Loaded neuron catalog:', Object.keys(neuronCatalog).length, 'neuron groups');
+    } catch (error) {
+        console.error('Failed to load neuron catalog:', error);
+    }
+}
+
+function openNeuronBrowser(mode) {
+    currentBrowserMode = mode;
+    const modal = document.getElementById('neuronModal');
+    modal.classList.add('active');
+    displayNeurons();
+}
+
+function closeNeuronBrowser() {
+    const modal = document.getElementById('neuronModal');
+    modal.classList.remove('active');
+    document.getElementById('neuronSearch').value = '';
+}
+
+function displayNeurons(filter = '') {
+    const browser = document.getElementById('neuronBrowser');
+    browser.innerHTML = '';
+    
+    const filterLower = filter.toLowerCase();
+    
+    for (const [key, neuron] of Object.entries(neuronCatalog)) {
+        // Apply filter
+        if (filter && !key.toLowerCase().includes(filterLower) && 
+            !neuron.type.toLowerCase().includes(filterLower) &&
+            !neuron.desc.toLowerCase().includes(filterLower)) {
+            continue;
+        }
+        
+        const card = document.createElement('div');
+        card.className = 'neuron-card';
+        
+        const idCount = Array.isArray(neuron.id) ? neuron.id.length : 1;
+        const idDisplay = Array.isArray(neuron.id) 
+            ? `${idCount} neurons` 
+            : `ID: ${neuron.id}`;
+        
+        card.innerHTML = `
+            <div class="neuron-card-header">
+                <span class="neuron-card-name">${neuron.name}</span>
+                <span class="neuron-card-type">${neuron.type}</span>
+            </div>
+            <div class="neuron-card-count">${idDisplay}</div>
+            <div class="neuron-card-desc">${neuron.desc}</div>
+        `;
+        
+        card.onclick = () => selectNeuron(neuron);
+        browser.appendChild(card);
+    }
+}
+
+function filterNeurons() {
+    const searchTerm = document.getElementById('neuronSearch').value;
+    displayNeurons(searchTerm);
+}
+
+function selectNeuron(neuron) {
+    const ids = Array.isArray(neuron.id) ? neuron.id : [neuron.id];
+    
+    if (currentBrowserMode === 'input') {
+        // Add to input neurons with default rate of 100 Hz
+        const textarea = document.getElementById('inputNeurons');
+        const currentValue = textarea.value.trim();
+        const newLine = `[${ids.join(', ')}],100  # ${neuron.name}`;
+        textarea.value = currentValue ? currentValue + '\n' + newLine : newLine;
+    } else {
+        // Add to output neurons
+        const textarea = document.getElementById('outputNeurons');
+        const currentValue = textarea.value.trim();
+        const newLine = `[${ids.join(', ')}]  # ${neuron.name}`;
+        textarea.value = currentValue ? currentValue + '\n' + newLine : newLine;
+    }
+    
+    closeNeuronBrowser();
+}
+
+// Load catalog when page loads
+window.addEventListener('DOMContentLoaded', loadNeuronCatalog);
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('neuronModal');
+    if (event.target === modal) {
+        closeNeuronBrowser();
+    }
+}
+
+// Helper function to resolve neuron names to IDs
+function resolveNeuronName(name) {
+    const cleanName = name.trim();
+    
+    // Direct exact match
+    if (neuronCatalog[cleanName]) {
+        const neuron = neuronCatalog[cleanName];
+        return Array.isArray(neuron.id) ? neuron.id : [neuron.id];
+    }
+    
+    // Partial match - find all neurons that start with this name
+    const matches = [];
+    for (const [key, neuron] of Object.entries(neuronCatalog)) {
+        if (key.startsWith(cleanName)) {
+            const ids = Array.isArray(neuron.id) ? neuron.id : [neuron.id];
+            matches.push(...ids);
+        }
+    }
+    
+    return matches;
+}
+
+// Helper function to parse a neuron identifier (could be ID or name)
+function parseNeuronIdentifier(identifier) {
+    const trimmed = identifier.trim();
+    
+    // Try parsing as number first
+    const numId = parseInt(trimmed);
+    if (!isNaN(numId)) {
+        return [numId];
+    }
+    
+    // Otherwise treat as neuron name
+    const ids = resolveNeuronName(trimmed);
+    if (ids.length === 0) {
+        console.warn(`Could not resolve neuron name: ${trimmed}`);
+    }
+    return ids;
+}
+
+async function setupAnalysis() {
+    const statusMsg = document.getElementById('statusMsg');
+    const setupBtn = document.getElementById('setupBtn');
+    const runBtn = document.getElementById('runBtn');
+    
+    statusMsg.innerHTML = '';
+    setupBtn.disabled = true;
+
+    try {
+        // Parse input neurons
+        const inputText = document.getElementById('inputNeurons').value.trim();
+        const inputNeurons = [];
+        if (inputText) {
+            const lines = inputText.split('\n');
+            for (const line of lines) {
+                // Remove comments (anything after #)
+                let trimmed = line.split('#')[0].trim();
+                if (!trimmed) continue;
+                
+                // Check if it's a Python list format: [item1, item2],rate
+                if (trimmed.startsWith('[')) {
+                    const match = trimmed.match(/\[([^\]]+)\]\s*,\s*([\d.]+)/);
+                    if (match) {
+                        const items = match[1].split(',');
+                        const rate = parseFloat(match[2]);
+                        
+                        for (const item of items) {
+                            const ids = parseNeuronIdentifier(item);
+                            for (const id of ids) {
+                                inputNeurons.push({ id: id, rate: rate });
+                            }
+                        }
+                    }
+                } else {
+                    // Standard format: identifier,rate
+                    const parts = trimmed.split(',');
+                    if (parts.length === 2) {
+                        const rate = parseFloat(parts[1].trim());
+                        if (!isNaN(rate)) {
+                            const ids = parseNeuronIdentifier(parts[0]);
+                            for (const id of ids) {
+                                inputNeurons.push({ id: id, rate: rate });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Parse output neurons
+        const outputText = document.getElementById('outputNeurons').value.trim();
+        const outputNeurons = [];
+        if (outputText) {
+            // Remove comments from entire text
+            const cleanText = outputText.split('\n').map(line => line.split('#')[0]).join('\n').trim();
+            
+            // Check if it's a Python list format: [item1, item2]
+            if (cleanText.includes('[')) {
+                const match = cleanText.match(/\[([^\]]+)\]/);
+                if (match) {
+                    const items = match[1].split(',');
+                    for (const item of items) {
+                        const ids = parseNeuronIdentifier(item);
+                        outputNeurons.push(...ids);
+                    }
+                }
+            } else {
+                // Split by newlines and commas
+                const tokens = cleanText.split(/[\n,]+/);
+                for (const token of tokens) {
+                    const ids = parseNeuronIdentifier(token);
+                    outputNeurons.push(...ids);
+                }
+            }
+        }
+
+        if (inputNeurons.length === 0 && outputNeurons.length === 0) {
+            throw new Error('Please specify at least some input or output neurons');
+        }
+
+        // Send setup request
+        const response = await fetch('/api/io-analysis/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input_neurons: inputNeurons, output_neurons: outputNeurons })
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            statusMsg.innerHTML = `<div class="success">✓ Setup complete: ${data.input_count} input neurons, ${data.output_count} output neurons</div>`;
+            setupComplete = true;
+            runBtn.disabled = false;
+        } else {
+            throw new Error(data.error || 'Setup failed');
+        }
+    } catch (error) {
+        statusMsg.innerHTML = `<div class="error">✗ Error: ${error.message}</div>`;
+        runBtn.disabled = true;
+    } finally {
+        setupBtn.disabled = false;
+    }
+}
+
+async function runAnalysis() {
+    if (!setupComplete) {
+        alert('Please run setup first');
+        return;
+    }
+
+    const statusMsg = document.getElementById('statusMsg');
+    const runBtn = document.getElementById('runBtn');
+    const setupBtn = document.getElementById('setupBtn');
+    
+    statusMsg.innerHTML = '<div style="color: #fbbf24;">⏳ Running simulation...</div>';
+    runBtn.disabled = true;
+    setupBtn.disabled = true;
+
+    try {
+        const simTimeMs = parseInt(document.getElementById('simTime').value);
+        const batchSize = parseInt(document.getElementById('batchSize').value);
+        
+        // Convert ms to steps
+        const steps = Math.round(simTimeMs / DT_MS);
+
+        const response = await fetch('/api/io-analysis/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ steps, batch_size: batchSize })
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.stats) {
+            displayResults(data);
+            const simTimeMs = (data.steps_run * DT_MS).toFixed(1);
+            statusMsg.innerHTML = `<div class="success">✓ Simulation complete (${simTimeMs} ms, ${data.steps_run.toLocaleString()} steps)</div>`;
+        } else {
+            throw new Error(data.error || 'No statistics returned');
+        }
+    } catch (error) {
+        statusMsg.innerHTML = `<div class="error">✗ Error: ${error.message}</div>`;
+    } finally {
+        runBtn.disabled = false;
+        setupBtn.disabled = false;
+    }
+}
+
+function displayResults(data) {
+    const stats = data.stats;
+    
+    // Show results panel
+    document.getElementById('resultsPanel').style.display = 'block';
+    
+    // Convert firing rates from spikes/step to Hz
+    const meanRateHz = stats.mean_firing_rate * STEPS_TO_HZ;
+    const stdRateHz = stats.std_firing_rate * STEPS_TO_HZ;
+    const minRateHz = stats.min_firing_rate * STEPS_TO_HZ;
+    const maxRateHz = stats.max_firing_rate * STEPS_TO_HZ;
+    
+    // Update summary stats (in Hz)
+    const simTimeMs = (data.steps_run * DT_MS).toFixed(1);
+    document.getElementById('stepsRun').textContent = `${simTimeMs} ms (${data.steps_run.toLocaleString()} steps)`;
+    document.getElementById('meanRate').textContent = meanRateHz.toFixed(2);
+    document.getElementById('stdRate').textContent = stdRateHz.toFixed(2);
+    document.getElementById('minRate').textContent = minRateHz.toFixed(2);
+    document.getElementById('maxRate').textContent = maxRateHz.toFixed(2);
+    
+    // Create bar chart
+    const neuronIds = stats.neuron_ids.map(id => `N${id}`);
+    const firingRatesHz = stats.firing_rates.map(r => r * STEPS_TO_HZ);
+    
+    const trace = {
+        x: neuronIds,
+        y: firingRatesHz,
+        type: 'bar',
+        marker: {
+            color: firingRatesHz,
+            colorscale: 'Viridis',
+            showscale: true,
+            colorbar: {
+                title: 'Hz',
+                titleside: 'right'
+            }
+        }
+    };
+    
+    const layout = {
+        title: 'Output Neuron Firing Rates',
+        xaxis: { title: 'Neuron ID' },
+        yaxis: { title: 'Firing Rate (Hz)' },
+        paper_bgcolor: '#0a0e17',
+        plot_bgcolor: '#111827',
+        font: { color: '#e0e0e0' },
+        margin: { t: 40, b: 80, l: 60, r: 20 }
+    };
+    
+    Plotly.newPlot('plotContainer', [trace], layout, { responsive: true });
+    
+    // Display detailed results
+    const neuronResults = document.getElementById('neuronResults');
+    neuronResults.innerHTML = '';
+    
+    const maxDisplayRate = Math.max(...firingRatesHz);
+    
+    for (let i = 0; i < stats.neuron_ids.length; i++) {
+        const div = document.createElement('div');
+        div.className = 'neuron-item';
+        const normalized = maxDisplayRate > 0 ? (firingRatesHz[i] / maxDisplayRate * 100).toFixed(1) : '0.0';
+        div.innerHTML = `
+            <div>${stats.neuron_ids[i]}</div>
+            <div>${stats.spike_counts[i]}</div>
+            <div>${firingRatesHz[i].toFixed(2)}</div>
+            <div>${normalized}%</div>
+        `;
+        neuronResults.appendChild(div);
+    }
+    
+    // Scroll to results
+    document.getElementById('resultsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function reset() {
+    if (confirm('Reset and clear all inputs?')) {
+        document.getElementById('inputNeurons').value = '';
+        document.getElementById('outputNeurons').value = '';
+        document.getElementById('simTime').value = '1000';
+        document.getElementById('batchSize').value = '50';
+        document.getElementById('statusMsg').innerHTML = '';
+        document.getElementById('resultsPanel').style.display = 'none';
+        document.getElementById('runBtn').disabled = true;
+        setupComplete = false;
+    }
+}
+</script>
+
+</body>
+</html>

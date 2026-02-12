@@ -13,7 +13,7 @@ import json
 import os
 import sys
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -54,6 +54,87 @@ async def get_positions():
         "positions_b64": pos_b64,
         "classes": classes,
     })
+
+
+@app.get("/io-analysis")
+async def io_analysis_page():
+    """Serve the I/O analysis page."""
+    return FileResponse(os.path.join(static_dir, "io_analysis.html"))
+
+
+@app.post("/api/io-analysis/setup")
+async def setup_io_analysis(request: Request):
+    """Setup custom input/output analysis.
+    
+    Expected request body:
+    {
+        "input_neurons": [{"id": 720575940629327659, "rate": 100}, ...],
+        "output_neurons": [720575940629327659, 720575940604737708, ...]
+    }
+    
+    Note: 'id' can be FlyWire root ID (large number) or neuron index (0-139254).
+          'rate' is firing rate in Hz (spikes per second).
+          Engine dt = {} ms, so 100 Hz → {} probability per timestep.
+    """.format(engine.dt, 100 * engine.dt / 1000.0)
+    try:
+        body = await request.json()
+        input_neurons = body.get("input_neurons", [])
+        output_neurons = body.get("output_neurons", [])
+        
+        # Set up rate-based stimulus for input neurons
+        if input_neurons:
+            engine.inject_stimulus_by_rate(input_neurons)
+        else:
+            engine.clear_stimulus()
+        
+        # Set up tracking for output neurons
+        if output_neurons:
+            engine.set_tracked_neurons(output_neurons)
+            engine.reset_tracked_spike_counts()
+        else:
+            engine.clear_tracked_neurons()
+        
+        return JSONResponse({
+            "success": True,
+            "input_count": len(input_neurons) if input_neurons else 0,
+            "output_count": len(output_neurons) if output_neurons else 0,
+        })
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+
+@app.post("/api/io-analysis/run")
+async def run_io_analysis(request: Request):
+    """Run simulation and get output neuron statistics.
+    
+    Expected request body:
+    {
+        "steps": 1000,
+        "batch_size": 50
+    }
+    """
+    try:
+        body = await request.json()
+        steps = body.get("steps", 1000)
+        batch_size = body.get("batch_size", 50)
+        
+        # Run simulation
+        total_steps = 0
+        for i in range(0, steps, batch_size):
+            n = min(batch_size, steps - i)
+            engine.step(n=n)
+            total_steps += n
+        
+        # Get statistics for tracked neurons
+        stats = engine.get_tracked_neuron_stats(total_steps)
+        
+        return JSONResponse({
+            "success": True,
+            "steps_run": total_steps,
+            "stats": stats
+        })
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
 
 async def broadcast(msg: dict):

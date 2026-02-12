@@ -31,7 +31,14 @@ ANNOTATIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 class SimEngine:
     """GPU-accelerated LIF simulator wrapping CuPy CUDA kernels."""
 
-    def __init__(self, data_file=None, seed=42):
+    def __init__(self, data_file=None, seed=42, dt=0.1):
+        """Initialize the simulation engine.
+        
+        Args:
+            data_file: Optional binary connectome file path
+            seed: Random seed
+            dt: Simulation timestep duration in milliseconds (default: 0.1 ms)
+        """
         if data_file:
             self.n_neurons, self.n_synapses, offsets, targets, weights = \
                 load_connectome_binary(data_file)
@@ -42,6 +49,7 @@ class SimEngine:
         self.kernels = compile_kernels()
         self.seed = seed
         self.current_step = 0
+        self.dt = dt  # Simulation timestep in milliseconds
 
         # GPU arrays — connectivity
         self.d_offsets = cp.asarray(offsets)
@@ -77,6 +85,14 @@ class SimEngine:
         # Stimulus state
         self._stimulus_indices = None
         self._stimulus_amplitude = 0.0
+        
+        # Rate-based stimulus (neuron_id -> firing_rate)
+        self._rate_stim_neurons = None
+        self._rate_stim_rates = None
+
+        # Tracked neurons for custom I/O analysis
+        self._tracked_neurons = None
+        self._tracked_spike_counts = None
 
         # Last-step spike indices (for 3D viz)
         self._last_spike_indices = np.array([], dtype=np.int32)
@@ -105,6 +121,12 @@ class SimEngine:
 
             # Root IDs
             self._root_ids = data['root_ids'].astype(np.int64) if 'root_ids' in data else None
+            
+            # Create root_id -> index mapping for FlyWire ID lookups
+            if self._root_ids is not None:
+                self._root_id_to_index = {int(rid): idx for idx, rid in enumerate(self._root_ids)}
+            else:
+                self._root_id_to_index = None
 
             # 3D positions (normalized to [-1,1])
             if 'pos_x' in data:
@@ -169,6 +191,7 @@ class SimEngine:
             print(f"No annotation file found ({ANNOTATIONS_FILE})")
             print("  Run download_metadata.py for biological annotations.")
             self._root_ids = None
+            self._root_id_to_index = None
             self._positions = None
             self._super_class = None
             self._setup_fallback_groups()
@@ -198,16 +221,148 @@ class SimEngine:
         self._num_motor_groups = 0
         self._neuron_to_motor = cp.full(self.n_neurons, -1, dtype=cp.int32)
 
+    def _convert_ids_to_indices(self, neuron_ids):
+        """Convert FlyWire root IDs to neuron indices.
+        
+        Args:
+            neuron_ids: List of neuron IDs (can be root_ids or indices)
+            
+        Returns:
+            numpy array of neuron indices
+        """
+        if self._root_id_to_index is None:
+            # No mapping available, assume IDs are already indices
+            return np.array(neuron_ids, dtype=np.int64)
+        
+        indices = []
+        for nid in neuron_ids:
+            nid_int = int(nid)
+            # If it's a large number, assume it's a root_id
+            if nid_int > self.n_neurons:
+                if nid_int in self._root_id_to_index:
+                    indices.append(self._root_id_to_index[nid_int])
+                else:
+                    raise ValueError(f"FlyWire root ID {nid_int} not found in connectome")
+            else:
+                # Small number, assume it's already an index
+                indices.append(nid_int)
+        
+        return np.array(indices, dtype=np.int64)
+
     def inject_stimulus(self, neuron_indices, amplitude=0.5):
+        """Inject constant current to specified neurons.
+        
+        Args:
+            neuron_indices: List of neuron IDs
+            amplitude: Current injection amplitude (0.0-1.0+)
+        """
         self._stimulus_indices = cp.asarray(np.array(neuron_indices, dtype=np.int64))
         self._stimulus_amplitude = float(amplitude)
+        # Clear rate-based stimulus
+        self._rate_stim_neurons = None
+        self._rate_stim_rates = None
 
-    def clear_stimulus(self):
+    def inject_stimulus_by_rate(self, neuron_rates):
+        """Inject stimulus by forcing neurons to spike at specified rates.
+        
+        Args:
+            neuron_rates: List of dicts [{"id": neuron_id, "rate": firing_rate_Hz}, ...]
+                         where neuron_id can be FlyWire root ID or neuron index,
+                         and firing_rate_Hz is the desired firing rate in Hz (spikes/second)
+        """
+        if not neuron_rates:
+            self._rate_stim_neurons = None
+            self._rate_stim_rates = None
+            return
+        
+        neuron_ids = [nr["id"] for nr in neuron_rates]
+        rates_hz = [nr["rate"] for nr in neuron_rates]
+        
+        # Convert FlyWire IDs to indices
+        neuron_indices = self._convert_ids_to_indices(neuron_ids)
+        
+        # Convert Hz to probability per timestep: prob = rate_Hz * (dt_ms / 1000)
+        prob_scale = self.dt / 1000.0
+        probabilities = [rate_hz * prob_scale for rate_hz in rates_hz]
+        
+        self._rate_stim_neurons = cp.asarray(neuron_indices)
+        self._rate_stim_rates = cp.asarray(np.array(probabilities, dtype=np.float32))
+        
+        # Clear current-based stimulus
         self._stimulus_indices = None
         self._stimulus_amplitude = 0.0
 
+    def clear_stimulus(self):
+        """Clear all stimulus (both current-based and rate-based)."""
+        self._stimulus_indices = None
+        self._stimulus_amplitude = 0.0
+        self._rate_stim_neurons = None
+        self._rate_stim_rates = None
+
     def set_noise_amp(self, value):
         self.noise_amp = np.float32(value)
+
+    def set_tracked_neurons(self, neuron_ids):
+        """Set specific neurons to track for custom I/O analysis.
+        
+        Args:
+            neuron_ids: List of neuron IDs (can be FlyWire root IDs or indices)
+        """
+        if neuron_ids is None or len(neuron_ids) == 0:
+            self._tracked_neurons = None
+            self._tracked_spike_counts = None
+            self._tracked_neuron_root_ids = None
+        else:
+            # Convert to indices
+            neuron_indices = self._convert_ids_to_indices(neuron_ids)
+            self._tracked_neurons = cp.asarray(neuron_indices)
+            self._tracked_spike_counts = cp.zeros(len(neuron_indices), dtype=cp.uint64)
+            # Store original IDs for reporting
+            self._tracked_neuron_root_ids = [int(nid) for nid in neuron_ids]
+
+    def clear_tracked_neurons(self):
+        """Clear tracked neurons."""
+        self._tracked_neurons = None
+        self._tracked_spike_counts = None
+        self._tracked_neuron_root_ids = None
+
+    def get_tracked_neuron_stats(self, n_steps):
+        """Get firing rate statistics for tracked neurons.
+        
+        Args:
+            n_steps: Number of timesteps that were run
+            
+        Returns:
+            dict with per-neuron stats (with root IDs if available), or None if no neurons tracked
+        """
+        if self._tracked_neurons is None:
+            return None
+        
+        spike_counts = self._tracked_spike_counts.get()
+        neuron_indices = self._tracked_neurons.get()
+        
+        firing_rates = spike_counts / n_steps if n_steps > 0 else spike_counts * 0
+        
+        # Use original root IDs if we have them, otherwise use indices
+        if hasattr(self, '_tracked_neuron_root_ids') and self._tracked_neuron_root_ids:
+            neuron_ids = self._tracked_neuron_root_ids
+        else:
+            neuron_ids = neuron_indices.tolist()
+        
+        return {
+            "neuron_ids": neuron_ids,
+            "spike_counts": spike_counts.tolist(),
+            "firing_rates": firing_rates.tolist(),
+            "mean_firing_rate": float(firing_rates.mean()) if len(firing_rates) > 0 else 0.0,
+            "std_firing_rate": float(firing_rates.std()) if len(firing_rates) > 0 else 0.0,
+            "min_firing_rate": float(firing_rates.min()) if len(firing_rates) > 0 else 0.0,
+            "max_firing_rate": float(firing_rates.max()) if len(firing_rates) > 0 else 0.0,
+        }
+
+    def reset_tracked_spike_counts(self):
+        """Reset spike counts for tracked neurons."""
+        if self._tracked_spike_counts is not None:
+            self._tracked_spike_counts.fill(0)
 
     def step(self, n=50):
         """Run n timesteps and return a metrics dict.
@@ -252,10 +407,13 @@ class SimEngine:
         spike_words_i32 = np.int32(self.spike_words)
         stim_indices = self._stimulus_indices
         stim_amp = self._stimulus_amplitude
+        rate_stim_neurons = self._rate_stim_neurons
+        rate_stim_rates = self._rate_stim_rates
 
         for sub in range(n):
             d_num_spikes.fill(0)
 
+            # Current-based stimulus
             if stim_indices is not None:
                 d_current[stim_indices] += stim_amp
 
@@ -266,6 +424,21 @@ class SimEngine:
                  self.tau_decay, self.v_threshold, self.v_reset,
                  np.uint32(self.seed), np.uint32(self.current_step),
                  self.noise_amp))
+
+            # Rate-based stimulus - force spikes probabilistically
+            if rate_stim_neurons is not None:
+                rng = cp.random.default_rng(self.seed + self.current_step)
+                rand_vals = rng.random(len(rate_stim_neurons), dtype=cp.float32)
+                # Force spike if random < rate
+                for i in range(len(rate_stim_neurons)):
+                    if rand_vals[i] < rate_stim_rates[i]:
+                        nid = int(rate_stim_neurons[i])
+                        word_idx = nid // 32
+                        bit_idx = nid % 32
+                        # Set spike bit
+                        d_spike_bits[word_idx] |= cp.uint32(1 << bit_idx)
+                        # Reset voltage to simulate spike
+                        d_voltage[nid] = self.v_reset
 
             k_compact(
                 (compact_blocks,), (BLOCK,),
@@ -278,6 +451,14 @@ class SimEngine:
                 (d_spike_bits, neuron_to_group, d_group_counts,
                  neuron_to_motor, d_motor_counts, d_total_spikes,
                  spike_words_i32, n_neurons_i32))
+
+            # Track specific neurons if requested
+            if self._tracked_neurons is not None:
+                for i, nid in enumerate(self._tracked_neurons):
+                    word_idx = nid // 32
+                    bit_idx = nid % 32
+                    if d_spike_bits[word_idx] & (1 << bit_idx):
+                        self._tracked_spike_counts[i] += 1
 
             # Propagate v2 — reads d_num_spikes from device memory, no CPU sync
             k_propagate_v2(
