@@ -425,20 +425,19 @@ class SimEngine:
                  np.uint32(self.seed), np.uint32(self.current_step),
                  self.noise_amp))
 
-            # Rate-based stimulus - force spikes probabilistically
+            # Rate-based stimulus - inject Poisson current (biologically realistic)
+            # Instead of forcing spikes, generate Poisson input and inject as current
             if rate_stim_neurons is not None:
                 rng = cp.random.default_rng(self.seed + self.current_step)
                 rand_vals = rng.random(len(rate_stim_neurons), dtype=cp.float32)
-                # Force spike if random < rate
+                # Poisson spike generation: prob = rate * dt/1000
+                # If spike occurs, inject scaled current (like PyTorch scalePoisson=250)
+                current_scale = 250.0  # Match PyTorch scalePoisson parameter
                 for i in range(len(rate_stim_neurons)):
                     if rand_vals[i] < rate_stim_rates[i]:
                         nid = int(rate_stim_neurons[i])
-                        word_idx = nid // 32
-                        bit_idx = nid % 32
-                        # Set spike bit
-                        d_spike_bits[word_idx] |= cp.uint32(1 << bit_idx)
-                        # Reset voltage to simulate spike
-                        d_voltage[nid] = self.v_reset
+                        # Inject current instead of forcing spike
+                        d_current[nid] += current_scale
 
             k_compact(
                 (compact_blocks,), (BLOCK,),

@@ -78,8 +78,8 @@ async def setup_io_analysis(request: Request):
     
     Note: 'id' can be FlyWire root ID (large number) or neuron index (0-139254).
           'rate' is firing rate in Hz (spikes per second).
-          Engine dt = {} ms, so 100 Hz → {} probability per timestep.
-    """.format(engine.dt, 100 * engine.dt / 1000.0)
+          Engine dt = 0.1 ms, so 100 Hz → 0.01 probability per timestep.
+    """
     try:
         body = await request.json()
         input_neurons = body.get("input_neurons", [])
@@ -104,6 +104,8 @@ async def setup_io_analysis(request: Request):
             "output_count": len(output_neurons) if output_neurons else 0,
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
 

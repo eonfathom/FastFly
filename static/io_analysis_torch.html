@@ -285,7 +285,7 @@ button.secondary:hover {
             Switch to FastFly CUDA Model
         </a>
     </div>
-    <h1>FastFly Input/Output Analysis (PyTorch Model)</h1>
+    <h1>FastFly Input/Output Analysis (PyTorch Model) <span id="deviceInfo" style="font-size: 16px; color: #fbbf24;"></span></h1>
     <p style="color: #94a3b8; margin-bottom: 24px;">
         Analyze signal propagation through the fly brain by specifying input neurons to stimulate and output neurons to monitor.<br>
         <strong style="color: #fbbf24;">Input neurons:</strong> Specified by firing rate in Hz (spikes per second)<br>
@@ -298,7 +298,7 @@ button.secondary:hover {
         <div class="panel">
             <h2>Input Neurons (Stimulus)</h2>
             <div class="input-group">
-                <label for="inputNeurons">Neuron IDs and Rates</label>
+                <label for="inputNeurons">Neuron IDs and Rates (enter as: ID, rate_Hz)</label>
                 <textarea id="inputNeurons" placeholder="By neuron name:
 DNa02_L,100
 DNa02_R,50
