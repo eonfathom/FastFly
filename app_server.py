@@ -19,6 +19,10 @@ from fastapi.staticfiles import StaticFiles
 
 from sim_engine import SimEngine
 
+# Global engines
+torch_engine = None  # Lazy initialization for PyTorch engine
+torch_setup_config = {}
+
 parser = argparse.ArgumentParser(description="FlyWire Simulator Web Server")
 parser.add_argument("--data", help="Binary connectome file")
 parser.add_argument("--host", default="127.0.0.1")
@@ -134,6 +138,108 @@ async def run_io_analysis(request: Request):
             "stats": stats
         })
     except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+
+@app.get("/io-analysis-torch")
+async def io_analysis_torch_page():
+    """Serve the PyTorch-based I/O analysis page."""
+    return FileResponse(os.path.join(static_dir, "io_analysis_torch.html"))
+
+
+@app.post("/api/io-analysis-torch/setup")
+async def setup_io_analysis_torch(request: Request):
+    """Setup custom input/output analysis using PyTorch/nourse_model.
+    
+    Expected request body:
+    {
+        "input_neurons": [{"id": 720575940629327659, "rate": 100}, ...],
+        "output_neurons": [720575940629327659, 720575940604737708, ...]
+    }
+    
+    Note: Uses nourse_model TorchModel with alpha synapses and refractory period.
+          More biologically accurate but slower than CUDA FastFly.
+    """
+    global torch_engine, torch_setup_config
+    
+    try:
+        # Lazy initialization of torch engine
+        if torch_engine is None:
+            from torch_engine import TorchSimEngine
+            torch_engine = TorchSimEngine(dt=0.1)
+        
+        body = await request.json()
+        input_neurons = body.get("input_neurons", [])
+        output_neurons = body.get("output_neurons", [])
+        
+        # Store config for reset capability
+        torch_setup_config = {
+            "input_neurons": input_neurons,
+            "output_neurons": output_neurons,
+        }
+        
+        # Reset engine state
+        torch_engine.reset()
+        
+        # Set up rate-based stimulus for input neurons
+        if input_neurons:
+            torch_engine.inject_stimulus_by_rate(input_neurons)
+        
+        # Set up tracking for output neurons
+        if output_neurons:
+            torch_engine.set_tracked_neurons(output_neurons)
+        
+        return JSONResponse({
+            "success": True,
+            "input_count": len(input_neurons) if input_neurons else 0,
+            "output_count": len(output_neurons) if output_neurons else 0,
+            "device": torch_engine.device,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+
+
+@app.post("/api/io-analysis-torch/run")
+async def run_io_analysis_torch(request: Request):
+    """Run PyTorch simulation and get output neuron statistics.
+    
+    Expected request body:
+    {
+        "steps": 1000,
+        "batch_size": 50
+    }
+    """
+    global torch_engine
+    print('Running PyTorch Simulation...') 
+    try:
+        if torch_engine is None:
+            raise ValueError("Engine not initialized. Run setup first.")
+        
+        body = await request.json()
+        steps = body.get("steps", 1000)
+        batch_size = body.get("batch_size", 50)
+        
+        # Run simulation in batches
+        total_steps = 0
+        for i in range(0, steps, batch_size):
+            n = min(batch_size, steps - i)
+            torch_engine.step(n_steps=n)
+            total_steps += n
+        
+        # Get statistics for tracked neurons
+        stats = torch_engine.get_tracked_neuron_stats(total_steps)
+        
+        return JSONResponse({
+            "success": True,
+            "steps_run": total_steps,
+            "stats": stats,
+            "device": torch_engine.device,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JSONResponse({"success": False, "error": str(e)}, status_code=400)
 
 

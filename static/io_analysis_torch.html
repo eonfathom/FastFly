@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FastFly I/O Analysis</title>
+<parameter name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastFly I/O Analysis (PyTorch Model)</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -20,14 +20,14 @@ body {
 h1 {
     font-size: 24px;
     font-weight: 600;
-    color: #60a5fa;
+    color: #f59e0b;
     margin-bottom: 24px;
     letter-spacing: 0.5px;
 }
 h2 {
     font-size: 18px;
     font-weight: 500;
-    color: #93c5fd;
+    color: #fbbf24;
     margin: 20px 0 12px 0;
 }
 .panel {
@@ -64,7 +64,7 @@ textarea {
 }
 button {
     padding: 10px 20px;
-    background: #3b82f6;
+    background: #f59e0b;
     color: white;
     border: none;
     border-radius: 4px;
@@ -74,10 +74,10 @@ button {
     margin-right: 10px;
 }
 button:hover {
-    background: #2563eb;
+    background: #d97706;
 }
 button:active {
-    background: #1d4ed8;
+    background: #b45309;
 }
 button:disabled {
     background: #475569;
@@ -167,7 +167,7 @@ button.secondary:hover {
 }
 .neuron-card:hover {
     background: #2d3b52;
-    border-color: #3b82f6;
+    border-color: #f59e0b;
 }
 .neuron-card-header {
     display: flex;
@@ -177,7 +177,7 @@ button.secondary:hover {
 }
 .neuron-card-name {
     font-weight: 600;
-    color: #60a5fa;
+    color: #fbbf24;
     font-size: 14px;
 }
 .neuron-card-type {
@@ -214,7 +214,7 @@ button.secondary:hover {
 .stat-value {
     font-size: 20px;
     font-weight: 600;
-    color: #60a5fa;
+    color: #fbbf24;
 }
 .neuron-list {
     max-height: 300px;
@@ -238,7 +238,7 @@ button.secondary:hover {
 }
 .neuron-header {
     font-weight: 600;
-    color: #93c5fd;
+    color: #fbbf24;
 }
 .help-text {
     font-size: 12px;
@@ -259,6 +259,15 @@ button.secondary:hover {
     border-radius: 4px;
     margin-top: 12px;
 }
+.info-banner {
+    background: #422006;
+    border: 1px solid #78350f;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 16px;
+    color: #fcd34d;
+    font-size: 13px;
+}
 #plotContainer {
     margin-top: 20px;
     height: 400px;
@@ -269,19 +278,19 @@ button.secondary:hover {
 
 <div class="container">
     <div style="margin-bottom: 12px;">
-        <a href="/" style="color: #60a5fa; text-decoration: none; font-size: 13px;">
+        <a href="/" style="color: #fbbf24; text-decoration: none; font-size: 13px;">
             ← Back to Main Simulator
         </a> |
-        <a href="/io-analysis-torch" style="color: #f59e0b; text-decoration: none; font-size: 13px;">
-            Switch to PyTorch Model
+        <a href="/io-analysis" style="color: #60a5fa; text-decoration: none; font-size: 13px;">
+            Switch to FastFly CUDA Model
         </a>
     </div>
-    <h1>FastFly Input/Output Analysis</h1>
+    <h1>FastFly Input/Output Analysis (PyTorch Model)</h1>
     <p style="color: #94a3b8; margin-bottom: 24px;">
         Analyze signal propagation through the fly brain by specifying input neurons to stimulate and output neurons to monitor.<br>
-        <strong style="color: #60a5fa;">Input neurons:</strong> Specified by firing rate in Hz (spikes per second)<br>
-        <strong style="color: #60a5fa;">Output neurons:</strong> Tracked to measure their average firing rates<br>
-        <strong style="color: #60a5fa;">Neuron Selection:</strong> Use neuron names (DNa02_L, oDN1_R, etc.), FlyWire root IDs (18-digit), or indices (0-139254)<br>
+        <strong style="color: #fbbf24;">Input neurons:</strong> Specified by firing rate in Hz (spikes per second)<br>
+        <strong style="color: #fbbf24;">Output neurons:</strong> Tracked to measure their average firing rates<br>
+        <strong style="color: #fbbf24;">Neuron Selection:</strong> Use neuron names (DNa02_L, oDN1_R, etc., see what's available by selecting "Browse Neuron Catalog"), FlyWire root IDs (18-digit), or indices (0-139254)<br>
         <em style="color: #64748b; font-size: 12px;">Simulation timestep: 0.1 ms | Partial name matching supported (e.g., "DNa02" matches both DNa02_L and DNa02_R)</em>
     </p>
 
@@ -344,8 +353,8 @@ Or use Browse Neuron Catalog button below!"></textarea>
         <div class="grid-2">
             <div class="input-group">
                 <label for="simTime">Simulation Time (ms)</label>
-                <input type="number" id="simTime" value="1000" min="1" max="10000" step="10">
-                <div class="help-text">Duration of simulation in milliseconds (1000 ms = 1 second)</div>
+                <input type="number" id="simTime" value="500" min="1" max="5000" step="10">
+                <div class="help-text">Duration of simulation in milliseconds (500 ms recommended for PyTorch)</div>
             </div>
             <div class="input-group">
                 <label for="batchSize">Batch Size</label>
@@ -576,7 +585,7 @@ async function setupAnalysis() {
     const setupBtn = document.getElementById('setupBtn');
     const runBtn = document.getElementById('runBtn');
     
-    statusMsg.innerHTML = '';
+    statusMsg.innerHTML = '<div style="color: #fbbf24;">⏳ Initializing PyTorch engine (may take a moment)...</div>';
     setupBtn.disabled = true;
 
     try {
@@ -652,7 +661,7 @@ async function setupAnalysis() {
         }
 
         // Send setup request
-        const response = await fetch('/api/io-analysis/setup', {
+        const response = await fetch('/api/io-analysis-torch/setup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ input_neurons: inputNeurons, output_neurons: outputNeurons })
@@ -661,7 +670,9 @@ async function setupAnalysis() {
         const data = await response.json();
         
         if (data.success) {
-            statusMsg.innerHTML = `<div class="success">✓ Setup complete: ${data.input_count} input neurons, ${data.output_count} output neurons</div>`;
+            const deviceIcon = data.device === 'cuda' ? '🚀' : '💻';
+            document.getElementById('deviceInfo').textContent = `${data.device.toUpperCase()} ${deviceIcon}`;
+            statusMsg.innerHTML = `<div class="success">✓ Setup complete: ${data.input_count} input neurons, ${data.output_count} output neurons (${data.device})</div>`;
             setupComplete = true;
             runBtn.disabled = false;
         } else {
@@ -685,7 +696,7 @@ async function runAnalysis() {
     const runBtn = document.getElementById('runBtn');
     const setupBtn = document.getElementById('setupBtn');
     
-    statusMsg.innerHTML = '<div style="color: #fbbf24;">⏳ Running simulation...</div>';
+    statusMsg.innerHTML = '<div style="color: #fbbf24;">⏳ Running PyTorch simulation (this may take longer than CUDA)...</div>';
     runBtn.disabled = true;
     setupBtn.disabled = true;
 
@@ -696,18 +707,21 @@ async function runAnalysis() {
         // Convert ms to steps
         const steps = Math.round(simTimeMs / DT_MS);
 
-        const response = await fetch('/api/io-analysis/run', {
+        const startTime = performance.now();
+        const response = await fetch('/api/io-analysis-torch/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ steps, batch_size: batchSize })
         });
+        const endTime = performance.now();
+        const elapsedMs = (endTime - startTime).toFixed(0);
 
         const data = await response.json();
 
         if (data.success && data.stats) {
             displayResults(data);
             const simTimeMs = (data.steps_run * DT_MS).toFixed(1);
-            statusMsg.innerHTML = `<div class="success">✓ Simulation complete (${simTimeMs} ms, ${data.steps_run.toLocaleString()} steps)</div>`;
+            statusMsg.innerHTML = `<div class="success">✓ Simulation complete (${simTimeMs} ms simulated, ${elapsedMs} ms real time, ${data.device})</div>`;
         } else {
             throw new Error(data.error || 'No statistics returned');
         }
@@ -749,7 +763,7 @@ function displayResults(data) {
         type: 'bar',
         marker: {
             color: firingRatesHz,
-            colorscale: 'Viridis',
+            colorscale: 'YlOrRd',
             showscale: true,
             colorbar: {
                 title: 'Hz',
@@ -759,7 +773,7 @@ function displayResults(data) {
     };
     
     const layout = {
-        title: 'Output Neuron Firing Rates',
+        title: 'Output Neuron Firing Rates (PyTorch Model)',
         xaxis: { title: 'Neuron ID' },
         yaxis: { title: 'Firing Rate (Hz)' },
         paper_bgcolor: '#0a0e17',
@@ -797,11 +811,12 @@ function reset() {
     if (confirm('Reset and clear all inputs?')) {
         document.getElementById('inputNeurons').value = '';
         document.getElementById('outputNeurons').value = '';
-        document.getElementById('simTime').value = '1000';
+        document.getElementById('simTime').value = '500';
         document.getElementById('batchSize').value = '50';
         document.getElementById('statusMsg').innerHTML = '';
         document.getElementById('resultsPanel').style.display = 'none';
         document.getElementById('runBtn').disabled = true;
+        document.getElementById('deviceInfo').textContent = 'Detecting...';
         setupComplete = false;
     }
 }

@@ -9,4 +9,10 @@ dependencies = [
     "fastapi>=0.129.0",
     "numpy>=2.4.2",
     "uvicorn[standard]>=0.32.0",
+    "torch>=2.0.0",
+    "pandas>=2.0.0",
+    "pyarrow>=10.0.0",
+    "matplotlib>=3.10.8",
+    "seaborn>=0.13.2",
+    "tqdm>=4.67.3",
 ]
