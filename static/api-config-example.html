@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Configuration - FlyWire</title>
+</head>
+<body>
+    <script>
+        // API Configuration for Vercel Deployment
+        // This script should be included in all HTML files that make API calls
+        
+        (function() {
+            // Get API URL from environment or use default
+            // In Vercel, you can set VITE_API_URL as an environment variable
+            const getApiBaseUrl = () => {
+                // Check if running on Vercel
+                if (window.location.hostname.includes('vercel.app') || 
+                    window.location.hostname !== 'localhost' && 
+                    window.location.hostname !== '127.0.0.1') {
+                    // Production: Use environment variable or hardcoded EC2 URL
+                    return '__API_URL__'; // This will be replaced by Vercel build
+                }
+                // Development: Use local server
+                return 'http://localhost:8000';
+            };
+            
+            const API_BASE_URL = getApiBaseUrl();
+            const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
+            
+            // Global helper functions
+            window.getApiUrl = function(path) {
+                // Handle absolute paths
+                if (path.startsWith('/')) {
+                    return API_BASE_URL + path;
+                }
+                return API_BASE_URL + '/' + path;
+            };
+            
+            window.getWsUrl = function(path) {
+                // Handle absolute paths
+                if (path.startsWith('/')) {
+                    return WS_BASE_URL + path;
+                }
+                return WS_BASE_URL + '/' + path;
+            };
+            
+            // Override fetch to automatically prepend API URL
+            const originalFetch = window.fetch;
+            window.fetch = function(url, options) {
+                // Only modify API calls (not static assets)
+                if (typeof url === 'string' && url.startsWith('/api/')) {
+                    url = getApiUrl(url);
+                }
+                return originalFetch(url, options);
+            };
+            
+            // Log configuration for debugging
+            console.log('API Configuration:', {
+                base: API_BASE_URL,
+                ws: WS_BASE_URL,
+                hostname: window.location.hostname
+            });
+        })();
+    </script>
+</body>
+</html>

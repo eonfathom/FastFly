@@ -16,6 +16,7 @@ import sys
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 from sim_engine import SimEngine
 
@@ -35,6 +36,16 @@ print(f"Engine ready: {engine.n_neurons} neurons, {engine.n_synapses} synapses\n
 
 app = FastAPI(title="FlyWire Simulator")
 
+# Configure CORS for production deployment
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -46,6 +57,16 @@ clients: list[WebSocket] = []
 @app.get("/")
 async def index():
     return FileResponse(os.path.join(static_dir, "index.html"))
+
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for load balancers and monitoring."""
+    return JSONResponse({
+        "status": "healthy",
+        "n_neurons": engine.n_neurons,
+        "n_synapses": engine.n_synapses,
+    })
 
 
 @app.get("/api/positions")

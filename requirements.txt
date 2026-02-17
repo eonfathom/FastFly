@@ -1,0 +1,10 @@
+cupy-cuda12x>=13.6.0
+fastapi>=0.129.0
+numpy>=1.24.0,<2.0.0
+uvicorn[standard]>=0.32.0
+torch>=2.0.0
+pandas>=2.0.0
+pyarrow>=10.0.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
+tqdm>=4.65.0
