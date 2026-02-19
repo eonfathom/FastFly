@@ -19,3 +19,5 @@ __pycache__/
 
 # Misc
 nul
+.vercel
+.env*.local

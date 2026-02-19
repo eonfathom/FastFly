@@ -1,0 +1,61 @@
+# Exclude backend and large files from Vercel deployment
+# Only deploy the static/ folder
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info
+.Python
+venv/
+.venv/
+ENV/
+
+# Backend files (not needed for frontend)
+app.py
+app_server.py
+sim_engine.py
+torch_engine.py
+flywire_sim.py
+*.cu
+build.bat
+download_*.py
+characterize_*.py
+
+# Large data files
+*.npz
+*.bin
+*.csv
+*.tsv
+
+# Jupyter notebooks
+*.ipynb
+nourse_model/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Documentation (optional, keep if you want)
+*.md
+!README.md
+
+# Build artifacts
+dist/
+build/
+results/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Environment files
+.env
+.env.*

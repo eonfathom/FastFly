@@ -4,6 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FlyWire Connectome Simulator</title>
+<script>
+// API Configuration - Update this URL to your EC2 backend
+window.API_BASE_URL = 'http://18.222.142.185:8000';
+window.WS_BASE_URL = 'ws://18.222.142.185:8000';
+
+// Override fetch to use absolute API URL
+const originalFetch = window.fetch;
+window.fetch = function(url, options) {
+    if (typeof url === 'string' && url.startsWith('/api/')) {
+        url = window.API_BASE_URL + url;
+    } else if (typeof url === 'string' && url.startsWith('/static/')) {
+        // Keep static files relative for Vercel
+        url = url;
+    }
+    return originalFetch(url, options);
+};
+console.log('API configured:', window.API_BASE_URL);
+</script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -1554,8 +1572,7 @@ document.addEventListener('keydown', function(e) {
 
 // ---- WebSocket ----
 function connect() {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${proto}//${location.host}/ws`);
+    ws = new WebSocket(window.WS_BASE_URL + '/ws');
 
     ws.onopen = () => {
         document.getElementById('status-dot').className = 'status-dot connected';

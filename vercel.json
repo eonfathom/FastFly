@@ -1,12 +1,17 @@
 {
-  "version": 2,
-  "public": true,
-  "buildCommand": "echo 'No build needed for static files'",
+  "buildCommand": null,
+  "devCommand": null,
+  "installCommand": null,
   "outputDirectory": "static",
-  "routes": [
+  "framework": null,
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/io-analysis",
+      "destination": "/io_analysis.html"
+    },
+    {
+      "source": "/io-analysis-torch",
+      "destination": "/io_analysis_torch.html"
     }
   ],
   "headers": [
