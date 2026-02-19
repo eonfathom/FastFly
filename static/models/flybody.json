@@ -1,0 +1,514 @@
+{
+  "nodes": [
+    {
+      "node_name": "thorax__thorax",
+      "body_name": "thorax",
+      "mesh_name": "thorax",
+      "material": null
+    },
+    {
+      "node_name": "thorax__thorax_black",
+      "body_name": "thorax",
+      "mesh_name": "thorax_black",
+      "material": "black"
+    },
+    {
+      "node_name": "head__head",
+      "body_name": "head",
+      "mesh_name": "head",
+      "material": null
+    },
+    {
+      "node_name": "head__head_red",
+      "body_name": "head",
+      "mesh_name": "head_red",
+      "material": "red"
+    },
+    {
+      "node_name": "head__head_ocelli",
+      "body_name": "head",
+      "mesh_name": "head_ocelli",
+      "material": "ocelli"
+    },
+    {
+      "node_name": "head__head_black",
+      "body_name": "head",
+      "mesh_name": "head_black",
+      "material": "black"
+    },
+    {
+      "node_name": "rostrum__rostrum",
+      "body_name": "rostrum",
+      "mesh_name": "rostrum",
+      "material": null
+    },
+    {
+      "node_name": "rostrum__rostrum_bristle-brown",
+      "body_name": "rostrum",
+      "mesh_name": "rostrum_bristle-brown",
+      "material": "bristle-brown"
+    },
+    {
+      "node_name": "haustellum__haustellum",
+      "body_name": "haustellum",
+      "mesh_name": "haustellum",
+      "material": null
+    },
+    {
+      "node_name": "haustellum__haustellum_black",
+      "body_name": "haustellum",
+      "mesh_name": "haustellum_black",
+      "material": "black"
+    },
+    {
+      "node_name": "labrum_left__labrum_left_lower",
+      "body_name": "labrum_left",
+      "mesh_name": "labrum_left_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "labrum_right__labrum_right_lower",
+      "body_name": "labrum_right",
+      "mesh_name": "labrum_right_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "antenna_left__antenna_left",
+      "body_name": "antenna_left",
+      "mesh_name": "antenna_left",
+      "material": null
+    },
+    {
+      "node_name": "antenna_left__antenna_left_black",
+      "body_name": "antenna_left",
+      "mesh_name": "antenna_left_black",
+      "material": "black"
+    },
+    {
+      "node_name": "antenna_right__antenna_right",
+      "body_name": "antenna_right",
+      "mesh_name": "antenna_right",
+      "material": null
+    },
+    {
+      "node_name": "antenna_right__antenna_right_black",
+      "body_name": "antenna_right",
+      "mesh_name": "antenna_right_black",
+      "material": "black"
+    },
+    {
+      "node_name": "wing_left__wing_left_brown",
+      "body_name": "wing_left",
+      "mesh_name": "wing_left_brown",
+      "material": "brown"
+    },
+    {
+      "node_name": "wing_left__wing_left_membrane",
+      "body_name": "wing_left",
+      "mesh_name": "wing_left_membrane",
+      "material": "membrane"
+    },
+    {
+      "node_name": "wing_right__wing_right_brown",
+      "body_name": "wing_right",
+      "mesh_name": "wing_right_brown",
+      "material": "brown"
+    },
+    {
+      "node_name": "wing_right__wing_right_membrane",
+      "body_name": "wing_right",
+      "mesh_name": "wing_right_membrane",
+      "material": "membrane"
+    },
+    {
+      "node_name": "abdomen__abdomen_1",
+      "body_name": "abdomen",
+      "mesh_name": "abdomen_1",
+      "material": null
+    },
+    {
+      "node_name": "abdomen__abdomen_1_lower",
+      "body_name": "abdomen",
+      "mesh_name": "abdomen_1_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "abdomen_2__abdomen_2",
+      "body_name": "abdomen_2",
+      "mesh_name": "abdomen_2",
+      "material": null
+    },
+    {
+      "node_name": "abdomen_2__abdomen_2_lower",
+      "body_name": "abdomen_2",
+      "mesh_name": "abdomen_2_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "abdomen_3__abdomen_3",
+      "body_name": "abdomen_3",
+      "mesh_name": "abdomen_3",
+      "material": null
+    },
+    {
+      "node_name": "abdomen_3__abdomen_3_lower",
+      "body_name": "abdomen_3",
+      "mesh_name": "abdomen_3_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "abdomen_4__abdomen_4",
+      "body_name": "abdomen_4",
+      "mesh_name": "abdomen_4",
+      "material": null
+    },
+    {
+      "node_name": "abdomen_4__abdomen_4_lower",
+      "body_name": "abdomen_4",
+      "mesh_name": "abdomen_4_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "abdomen_5__abdomen_5",
+      "body_name": "abdomen_5",
+      "mesh_name": "abdomen_5",
+      "material": null
+    },
+    {
+      "node_name": "abdomen_5__abdomen_5_lower",
+      "body_name": "abdomen_5",
+      "mesh_name": "abdomen_5_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "abdomen_6__abdomen_6",
+      "body_name": "abdomen_6",
+      "mesh_name": "abdomen_6",
+      "material": null
+    },
+    {
+      "node_name": "abdomen_6__abdomen_6_lower",
+      "body_name": "abdomen_6",
+      "mesh_name": "abdomen_6_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "abdomen_7__abdomen_8",
+      "body_name": "abdomen_7",
+      "mesh_name": "abdomen_8",
+      "material": null
+    },
+    {
+      "node_name": "abdomen_7__abdomen_7",
+      "body_name": "abdomen_7",
+      "mesh_name": "abdomen_7",
+      "material": null
+    },
+    {
+      "node_name": "abdomen_7__abdomen_7_lower",
+      "body_name": "abdomen_7",
+      "mesh_name": "abdomen_7_lower",
+      "material": "lower"
+    },
+    {
+      "node_name": "haltere_left__haltere_left",
+      "body_name": "haltere_left",
+      "mesh_name": "haltere_left",
+      "material": null
+    },
+    {
+      "node_name": "haltere_right__haltere_right",
+      "body_name": "haltere_right",
+      "mesh_name": "haltere_right",
+      "material": null
+    },
+    {
+      "node_name": "coxa_T1_left__coxa_T1_left",
+      "body_name": "coxa_T1_left",
+      "mesh_name": "coxa_T1_left",
+      "material": null
+    },
+    {
+      "node_name": "femur_T1_left__femur_T1_left",
+      "body_name": "femur_T1_left",
+      "mesh_name": "femur_T1_left",
+      "material": null
+    },
+    {
+      "node_name": "tibia_T1_left__tibia_T1_left",
+      "body_name": "tibia_T1_left",
+      "mesh_name": "tibia_T1_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus_T1_left__tarsus_T1_1_left",
+      "body_name": "tarsus_T1_left",
+      "mesh_name": "tarsus_T1_1_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus2_T1_left__tarsus_T1_2_left",
+      "body_name": "tarsus2_T1_left",
+      "mesh_name": "tarsus_T1_2_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus3_T1_left__tarsus_T1_3_left",
+      "body_name": "tarsus3_T1_left",
+      "mesh_name": "tarsus_T1_3_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus4_T1_left__tarsus_T1_4_left",
+      "body_name": "tarsus4_T1_left",
+      "mesh_name": "tarsus_T1_4_left",
+      "material": null
+    },
+    {
+      "node_name": "claw_T1_left__tarsal_claw_T1_left_brown",
+      "body_name": "claw_T1_left",
+      "mesh_name": "tarsal_claw_T1_left_brown",
+      "material": "brown"
+    },
+    {
+      "node_name": "coxa_T1_right__coxa_T1_right",
+      "body_name": "coxa_T1_right",
+      "mesh_name": "coxa_T1_right",
+      "material": null
+    },
+    {
+      "node_name": "femur_T1_right__femur_T1_right",
+      "body_name": "femur_T1_right",
+      "mesh_name": "femur_T1_right",
+      "material": null
+    },
+    {
+      "node_name": "tibia_T1_right__tibia_T1_right",
+      "body_name": "tibia_T1_right",
+      "mesh_name": "tibia_T1_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus_T1_right__tarsus_T1_1_right",
+      "body_name": "tarsus_T1_right",
+      "mesh_name": "tarsus_T1_1_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus2_T1_right__tarsus_T1_2_right",
+      "body_name": "tarsus2_T1_right",
+      "mesh_name": "tarsus_T1_2_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus3_T1_right__tarsus_T1_3_right",
+      "body_name": "tarsus3_T1_right",
+      "mesh_name": "tarsus_T1_3_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus4_T1_right__tarsus_T1_4_right",
+      "body_name": "tarsus4_T1_right",
+      "mesh_name": "tarsus_T1_4_right",
+      "material": null
+    },
+    {
+      "node_name": "claw_T1_right__tarsal_claw_T1_right_brown",
+      "body_name": "claw_T1_right",
+      "mesh_name": "tarsal_claw_T1_right_brown",
+      "material": "brown"
+    },
+    {
+      "node_name": "coxa_T2_left__coxa_T2_left",
+      "body_name": "coxa_T2_left",
+      "mesh_name": "coxa_T2_left",
+      "material": null
+    },
+    {
+      "node_name": "femur_T2_left__femur_T2_left",
+      "body_name": "femur_T2_left",
+      "mesh_name": "femur_T2_left",
+      "material": null
+    },
+    {
+      "node_name": "tibia_T2_left__tibia_T2_left",
+      "body_name": "tibia_T2_left",
+      "mesh_name": "tibia_T2_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus_T2_left__tarsus_T2_1_left",
+      "body_name": "tarsus_T2_left",
+      "mesh_name": "tarsus_T2_1_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus2_T2_left__tarsus_T2_2_left",
+      "body_name": "tarsus2_T2_left",
+      "mesh_name": "tarsus_T2_2_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus3_T2_left__tarsus_T2_3_left",
+      "body_name": "tarsus3_T2_left",
+      "mesh_name": "tarsus_T2_3_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus4_T2_left__tarsus_T2_4_left",
+      "body_name": "tarsus4_T2_left",
+      "mesh_name": "tarsus_T2_4_left",
+      "material": null
+    },
+    {
+      "node_name": "claw_T2_left__tarsal_claw_T2_left_brown",
+      "body_name": "claw_T2_left",
+      "mesh_name": "tarsal_claw_T2_left_brown",
+      "material": "brown"
+    },
+    {
+      "node_name": "coxa_T2_right__coxa_T2_right",
+      "body_name": "coxa_T2_right",
+      "mesh_name": "coxa_T2_right",
+      "material": null
+    },
+    {
+      "node_name": "femur_T2_right__femur_T2_right",
+      "body_name": "femur_T2_right",
+      "mesh_name": "femur_T2_right",
+      "material": null
+    },
+    {
+      "node_name": "tibia_T2_right__tibia_T2_right",
+      "body_name": "tibia_T2_right",
+      "mesh_name": "tibia_T2_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus_T2_right__tarsus_T2_1_right",
+      "body_name": "tarsus_T2_right",
+      "mesh_name": "tarsus_T2_1_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus2_T2_right__tarsus_T2_2_right",
+      "body_name": "tarsus2_T2_right",
+      "mesh_name": "tarsus_T2_2_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus3_T2_right__tarsus_T2_3_right",
+      "body_name": "tarsus3_T2_right",
+      "mesh_name": "tarsus_T2_3_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus4_T2_right__tarsus_T2_4_right",
+      "body_name": "tarsus4_T2_right",
+      "mesh_name": "tarsus_T2_4_right",
+      "material": null
+    },
+    {
+      "node_name": "claw_T2_right__tarsal_claw_T2_right_brown",
+      "body_name": "claw_T2_right",
+      "mesh_name": "tarsal_claw_T2_right_brown",
+      "material": "brown"
+    },
+    {
+      "node_name": "coxa_T3_left__coxa_T3_left",
+      "body_name": "coxa_T3_left",
+      "mesh_name": "coxa_T3_left",
+      "material": null
+    },
+    {
+      "node_name": "femur_T3_left__femur_T3_left",
+      "body_name": "femur_T3_left",
+      "mesh_name": "femur_T3_left",
+      "material": null
+    },
+    {
+      "node_name": "tibia_T3_left__tibia_T3_left",
+      "body_name": "tibia_T3_left",
+      "mesh_name": "tibia_T3_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus_T3_left__tarsus_T3_1_left",
+      "body_name": "tarsus_T3_left",
+      "mesh_name": "tarsus_T3_1_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus2_T3_left__tarsus_T3_2_left",
+      "body_name": "tarsus2_T3_left",
+      "mesh_name": "tarsus_T3_2_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus3_T3_left__tarsus_T3_3_left",
+      "body_name": "tarsus3_T3_left",
+      "mesh_name": "tarsus_T3_3_left",
+      "material": null
+    },
+    {
+      "node_name": "tarsus4_T3_left__tarsus_T3_4_left",
+      "body_name": "tarsus4_T3_left",
+      "mesh_name": "tarsus_T3_4_left",
+      "material": null
+    },
+    {
+      "node_name": "claw_T3_left__tarsal_claw_T3_left_brown",
+      "body_name": "claw_T3_left",
+      "mesh_name": "tarsal_claw_T3_left_brown",
+      "material": "brown"
+    },
+    {
+      "node_name": "coxa_T3_right__coxa_T3_right",
+      "body_name": "coxa_T3_right",
+      "mesh_name": "coxa_T3_right",
+      "material": null
+    },
+    {
+      "node_name": "femur_T3_right__femur_T3_right",
+      "body_name": "femur_T3_right",
+      "mesh_name": "femur_T3_right",
+      "material": null
+    },
+    {
+      "node_name": "tibia_T3_right__tibia_T3_right",
+      "body_name": "tibia_T3_right",
+      "mesh_name": "tibia_T3_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus_T3_right__tarsus_T3_1_right",
+      "body_name": "tarsus_T3_right",
+      "mesh_name": "tarsus_T3_1_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus2_T3_right__tarsus_T3_2_right",
+      "body_name": "tarsus2_T3_right",
+      "mesh_name": "tarsus_T3_2_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus3_T3_right__tarsus_T3_3_right",
+      "body_name": "tarsus3_T3_right",
+      "mesh_name": "tarsus_T3_3_right",
+      "material": null
+    },
+    {
+      "node_name": "tarsus4_T3_right__tarsus_T3_4_right",
+      "body_name": "tarsus4_T3_right",
+      "mesh_name": "tarsus_T3_4_right",
+      "material": null
+    },
+    {
+      "node_name": "claw_T3_right__tarsal_claw_T3_right_brown",
+      "body_name": "claw_T3_right",
+      "mesh_name": "tarsal_claw_T3_right_brown",
+      "material": "brown"
+    }
+  ]
+}

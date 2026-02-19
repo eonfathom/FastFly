@@ -5,26 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FlyWire Connectome Simulator</title>
 <script>
-// API Configuration - Update this URL to your EC2 backend
-window.API_BASE_URL = 'http://18.222.142.185:8000';
-window.WS_BASE_URL = 'ws://18.222.142.185:8000';
-
-// Override fetch to use absolute API URL
+// API Configuration
+window.API_BASE_URL = 'http://127.0.0.1:8000';
+window.WS_BASE_URL = 'ws://127.0.0.1:8000';
 const originalFetch = window.fetch;
 window.fetch = function(url, options) {
     if (typeof url === 'string' && url.startsWith('/api/')) {
         url = window.API_BASE_URL + url;
-    } else if (typeof url === 'string' && url.startsWith('/static/')) {
-        // Keep static files relative for Vercel
-        url = url;
     }
     return originalFetch(url, options);
 };
-console.log('API configured:', window.API_BASE_URL);
 </script>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -52,7 +46,7 @@ body {
     background: #0a0e17;
     display: flex;
     flex-direction: column;
-    padding: 12px;
+    padding: 0;
 }
 .panel-right {
     background: #111827;
@@ -94,6 +88,12 @@ button.inject { background: #065f46; border-color: #10b981; }
 button.inject:hover { background: #047857; }
 button.clear { background: #7f1d1d; border-color: #ef4444; }
 button.clear:hover { background: #991b1b; }
+button.env-food { background: #4a2c0a; border-color: #d97706; font-size: 12px; }
+button.env-food:hover { background: #5c3a10; }
+button.env-food.active { background: #92400e; border-color: #f59e0b; }
+button.env-obstacle { background: #1e293b; border-color: #64748b; font-size: 12px; }
+button.env-obstacle:hover { background: #334155; }
+button.env-obstacle.active { background: #334155; border-color: #94a3b8; }
 label {
     display: block;
     font-size: 12px;
@@ -168,50 +168,25 @@ input[type="range"] {
     display: flex;
     align-items: center;
 }
-.chart-container { flex: 1; min-height: 0; }
-#heatmap { width: 100%; height: 55%; }
-#timeseries { width: 100%; height: 25%; }
-.custom-range { display: none; }
-.custom-range.visible { display: block; }
 
-/* Tab system */
-.tab-bar {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 8px;
-    flex-shrink: 0;
-}
-.tab-btn {
-    padding: 5px 16px;
-    font-size: 12px;
-    border: 1px solid #334155;
-    background: #1e293b;
-    color: #94a3b8;
-    border-radius: 6px 6px 0 0;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-}
-.tab-btn:hover { background: #334155; color: #e2e8f0; }
-.tab-btn.active { background: #2563eb; border-color: #3b82f6; color: #fff; }
-.tab-content { display: none; flex: 1; min-height: 0; }
-.tab-content.active { display: flex; flex-direction: column; }
-
-/* 3D Brain container */
-#brain-container {
+/* Scene container */
+#scene-container {
     flex: 1;
     position: relative;
     min-height: 0;
-    border-radius: 8px;
     overflow: hidden;
-    background: #050510;
 }
-#brain-container canvas { width: 100% !important; height: 100% !important; }
-#brain-info {
+#scene-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+#scene-info {
     position: absolute;
     top: 10px;
     left: 10px;
     font-size: 11px;
-    color: #667;
+    color: rgba(255,255,240,0.5);
     pointer-events: none;
     line-height: 1.5;
 }
@@ -225,7 +200,7 @@ input[type="range"] {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    background: rgba(5,5,16,0.7);
+    background: rgba(0,0,0,0.4);
     padding: 4px 8px;
     border-radius: 4px;
 }
@@ -238,6 +213,18 @@ input[type="range"] {
     width: 8px;
     height: 8px;
     border-radius: 50%;
+}
+#placement-indicator {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 12px;
+    color: #fbbf24;
+    background: rgba(0,0,0,0.6);
+    padding: 6px 12px;
+    border-radius: 6px;
+    display: none;
+    pointer-events: none;
 }
 
 /* Mini stimulus body map */
@@ -281,40 +268,7 @@ input[type="range"] {
     pointer-events: none;
 }
 
-/* Fly body SVG styles */
-.fly-container {
-    position: relative;
-    width: 100%;
-    height: 20%;
-    min-height: 140px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.fly-svg { width: 100%; height: 100%; }
-.fly-part {
-    fill: #1e293b;
-    stroke: #475569;
-    stroke-width: 1;
-    cursor: pointer;
-    transition: fill 0.2s;
-}
-.fly-part:hover { stroke: #60a5fa; stroke-width: 2; }
-.fly-part.stimulated { stroke: #34d399; stroke-width: 2; stroke-dasharray: 4 2; }
-.fly-label {
-    font-size: 7px;
-    fill: #94a3b8;
-    text-anchor: middle;
-    pointer-events: none;
-}
-.fly-count {
-    font-size: 6px;
-    fill: #64748b;
-    text-anchor: middle;
-    pointer-events: none;
-}
-
-/* Motor readout section */
+/* Motor readout */
 .motor-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -483,7 +437,7 @@ input[type="range"] {
         <h1>FlyWire Simulator</h1>
         <div style="margin-bottom: 12px; padding: 8px; background: #1e293b; border-radius: 4px;">
             <a href="/io-analysis" style="color: #60a5fa; text-decoration: none; font-size: 13px;">
-                →I/O Analysis
+                &rarr; I/O Analysis
             </a>
         </div>
         <div id="status-bar">
@@ -498,11 +452,11 @@ input[type="range"] {
             <button id="btn-step" onclick="sendCmd('step')">Step</button>
         </div>
 
-        <label>Batch size (steps per frame)</label>
+        <label>Simulation Speed</label>
         <div class="slider-row">
-            <input type="range" id="batch-size" min="10" max="200" value="50" step="10"
-                   oninput="updateSlider(this, 'batch-val'); sendParam('batch_size', this.value)">
-            <span class="slider-val" id="batch-val">50</span>
+            <input type="range" id="speed-slider" min="-10" max="10" value="0" step="1"
+                   oninput="updateSpeedSlider(this)">
+            <span class="slider-val" id="speed-val">1.0x</span>
         </div>
 
         <label>Noise amplitude</label>
@@ -520,18 +474,13 @@ input[type="range"] {
                 3D brain data
             </label>
             <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
-                <input type="checkbox" id="tog-heatmap" checked
-                       onchange="sendParam('send_group_rates', this.checked ? 1 : 0)">
-                Heatmap data
-            </label>
-            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer;">
                 <input type="checkbox" id="tog-motor" checked
                        onchange="sendParam('send_motor_rates', this.checked ? 1 : 0)">
                 Motor output data
             </label>
         </div>
 
-        <h2>Stimulus — click to apply</h2>
+        <h2>Stimulus &mdash; click to apply</h2>
         <div class="stim-body-map" id="stim-body-map"></div>
 
         <label>Amplitude</label>
@@ -555,6 +504,14 @@ input[type="range"] {
             <input type="number" id="stim-end" value="1000" min="0">
             <button class="inject" style="margin-top:6px;" onclick="injectCustomStimulus()">Inject Custom</button>
         </details>
+
+        <h2>Environment</h2>
+        <div class="btn-group">
+            <button class="env-food" id="btn-add-food" onclick="togglePlacement('food')">+ Food</button>
+            <button class="env-obstacle" id="btn-add-obstacle" onclick="togglePlacement('obstacle')">+ Obstacle</button>
+            <button class="clear" onclick="clearEnvironment()" style="font-size:12px;">Clear All</button>
+        </div>
+        <p id="env-status" style="font-size:10px; color:#475569;"></p>
 
         <h2>Metrics</h2>
         <div class="metric-card"><div class="metric-row">
@@ -583,36 +540,29 @@ input[type="range"] {
         </div></div>
     </div>
 
-    <!-- Center Panel: Tabbed Charts + 3D Brain -->
+    <!-- Center Panel: Unified 3D Scene -->
     <div class="panel panel-center">
-        <div class="tab-bar">
-            <button class="tab-btn active" onclick="switchTab('charts')">Charts</button>
-            <button class="tab-btn" onclick="switchTab('brain3d')">3D Brain</button>
-        </div>
-
-        <div class="tab-content active" id="tab-charts">
-            <div class="chart-container">
-                <div id="heatmap"></div>
-                <div id="timeseries"></div>
-                <div class="fly-container" id="fly-container"></div>
-            </div>
-        </div>
-
-        <div class="tab-content" id="tab-brain3d">
-            <div id="brain-container">
-                <div id="brain-info">Loading 3D brain...</div>
-                <div id="brain-legend"></div>
-            </div>
+        <div id="scene-container">
+            <div id="scene-info">Loading 3D scene...</div>
+            <div id="brain-legend"></div>
+            <div id="placement-indicator">Click ground to place</div>
         </div>
     </div>
 
-    <!-- Right Panel: Fly Body + Motor Output -->
+    <!-- Right Panel: Motor Output -->
     <div class="panel panel-right">
-        <h2>Drosophila Body</h2>
+        <h2>Fly Status</h2>
         <p style="font-size:11px; color:#64748b; margin-bottom:8px;">
-            Click body parts to stimulate. Orange = motor output activity.
+            Click fly in the 3D scene to stimulate. Orange glow = motor activity.
         </p>
-        <div id="fly-body-svg-container" style="width:100%; height:280px;"></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Fly Speed</span>
+            <span class="metric-value" id="m-flyspeed" style="font-size:14px;">0.00</span>
+        </div></div>
+        <div class="metric-card"><div class="metric-row">
+            <span class="metric-label">Heading</span>
+            <span class="metric-value" id="m-flyheading" style="font-size:14px;">0&deg;</span>
+        </div></div>
 
         <h2>Motor Output</h2>
         <p style="font-size:10px; color:#475569; margin-bottom:4px;">Click cards to see active neurons</p>
@@ -654,255 +604,727 @@ input[type="range"] {
 </div>
 
 <script>
-// ---- State ----
+// ========================================================================
+// STATE
+// ========================================================================
 let ws = null;
 let running = false;
-const spikeHistory = [];
-const groupRatesHistory = [];
-const MAX_HISTORY = 200;
-let groupLabels = [];
 let bodyInfo = null;
 let activeStimulus = null;
-let currentTab = 'charts';
 let lastActiveIndices = [];
+let lastMotorRates = null;
 
-// ---- Motor Detail Live State ----
+// Motor detail modal
 let currentMotorDetailGroup = null;
-let currentMotorDetailNeurons = null; // cached [{index, root_id, active}, ...]
+let currentMotorDetailNeurons = null;
 let motorDetailLastUpdate = 0;
 const MOTOR_DETAIL_THROTTLE_MS = 300;
 
-// ---- 3D Fly Body State ----
-let flyScene, flyCamera, flyRenderer;
-let flyBodyGroup;
+// 3D Scene
+let scene, camera, renderer, controls;
+let flyEntity;        // top-level group that moves/rotates
+let flyBodyGroup;     // fly body model (child of flyEntity)
+let brainGroup;       // brain point cloud (child of flyEntity)
 let flyMeshMap = {};
-let flyNeedsRender = false;
-let flyInitialized = false;
 let flyClickTargets = [];
 let flyStimHighlights = [];
+let groundMesh;
 
-// ---- 3D Brain State ----
-let brainScene, brainCamera, brainRenderer, brainControls;
-let brainPoints = null;      // base point cloud (all neurons, dim colors)
-let brainGlowPoints = null;  // glow overlay (active neurons only, larger + additive)
-let brainPositions = null;   // Float32Array [N*3]
-let brainBaseColors = null;  // Float32Array [N*3]
-let brainGlowColors = null;  // Float32Array [N*3] for glow layer
+// Brain
+let brainPoints = null;
+let brainGlowPoints = null;
+let brainPositions = null;
+let brainBaseColors = null;
+let brainGlowColors = null;
 let brainClassLabels = null;
 let brainN = 0;
-let brainInitialized = false;
-let brainAnimating = false;
+const MAX_GLOW = 5000;
+const GLOW_COLOR = [0.2, 0.85, 1.0];
+const DIM_ALPHA = 0.5;
 
-// Class colors — pink / cyan-blue futuristic palette
 const CLASS_COLORS = [
-    [0.85, 0.25, 0.55],  // sensory - hot pink
-    [0.10, 0.70, 0.95],  // ascending - cyan-blue
-    [0.75, 0.18, 0.70],  // optic - magenta-purple
-    [0.60, 0.15, 0.50],  // central - deep plum
-    [0.20, 0.55, 0.90],  // visual_projection - blue
-    [0.90, 0.35, 0.65],  // visual_centrifugal - rose-pink
-    [0.15, 0.80, 0.85],  // descending - teal cyan
-    [0.70, 0.20, 0.60],  // motor - purple
-    [0.30, 0.65, 0.95],  // endocrine - sky cyan
-    [0.95, 0.40, 0.70],  // extra - pink
+    [0.85, 0.25, 0.55],
+    [0.10, 0.70, 0.95],
+    [0.75, 0.18, 0.70],
+    [0.60, 0.15, 0.50],
+    [0.20, 0.55, 0.90],
+    [0.90, 0.35, 0.65],
+    [0.15, 0.80, 0.85],
+    [0.70, 0.20, 0.60],
+    [0.30, 0.65, 0.95],
+    [0.95, 0.40, 0.70],
 ];
-const GLOW_COLOR = [0.2, 0.85, 1.0]; // bright cyan glow for active neurons
-const DIM_ALPHA = 0.5; // base color intensity on dark bg
 
-// ---- Tab switching ----
-function switchTab(tab) {
-    currentTab = tab;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+// Fly movement
+let flyPos = { x: 0, z: 0 };
+let flyAngle = 0;
+let flySpeed = 0;
+let gaitPhase = 0;
+let speedMultiplier = 1.0;
+const BASE_BATCH = 50;
 
-    if (tab === 'charts') {
-        document.querySelectorAll('.tab-btn')[0].classList.add('active');
-        document.getElementById('tab-charts').classList.add('active');
-        // Resize plotly charts
-        setTimeout(() => {
-            if (heatmapInitialized) Plotly.Plots.resize('heatmap');
-            if (timeseriesInitialized) Plotly.Plots.resize('timeseries');
-        }, 50);
-    } else {
-        document.querySelectorAll('.tab-btn')[1].classList.add('active');
-        document.getElementById('tab-brain3d').classList.add('active');
-        if (!brainInitialized) {
-            initBrain3D();
-        } else {
-            onBrainResize();
-            // Show cached activity immediately
-            if (lastActiveIndices && lastActiveIndices.length > 0) {
-                updateBrainActivity(lastActiveIndices);
-            }
+// Leg animation
+let legAnimA = []; // FL, MR, HL
+let legAnimB = []; // FR, ML, HR
+
+// Environment objects
+let envObjects = [];
+let placementMode = null;
+
+// Animation
+let lastFrameTime = 0;
+const GARDEN_SIZE = 8;
+const GROUND_Y = -0.9;
+
+// ========================================================================
+// TEXTURES
+// ========================================================================
+function createRakedSandTexture() {
+    var size = 1024;
+    var canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    var ctx = canvas.getContext('2d');
+
+    // Base warm sand
+    ctx.fillStyle = '#e8dcc8';
+    ctx.fillRect(0, 0, size, size);
+
+    // Subtle grain noise
+    var imgData = ctx.getImageData(0, 0, size, size);
+    for (var i = 0; i < imgData.data.length; i += 4) {
+        var n = (Math.random() - 0.5) * 12;
+        imgData.data[i] += n;
+        imgData.data[i + 1] += n;
+        imgData.data[i + 2] += n;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Concentric raked circles (off-center for wabi-sabi)
+    var cx = size * 0.35, cy = size * 0.42;
+    ctx.strokeStyle = 'rgba(180, 165, 140, 0.4)';
+    ctx.lineWidth = 1.5;
+    for (var r = 25; r < size * 0.85; r += 9) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // Secondary center
+    var cx2 = size * 0.72, cy2 = size * 0.6;
+    for (var r = 20; r < size * 0.35; r += 9) {
+        ctx.beginPath();
+        ctx.arc(cx2, cy2, r, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+}
+
+function createSkyGradient() {
+    var canvas = document.createElement('canvas');
+    canvas.width = 4;
+    canvas.height = 512;
+    var ctx = canvas.getContext('2d');
+    var grad = ctx.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0, '#b0a0cc');   // lavender above
+    grad.addColorStop(0.4, '#c8b4a0'); // warm mid
+    grad.addColorStop(0.7, '#e0c89a'); // amber horizon
+    grad.addColorStop(1, '#d4a574');   // deeper amber below
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 4, 512);
+    var tex = new THREE.CanvasTexture(canvas);
+    return tex;
+}
+
+function createWoodTexture() {
+    var canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#8b6914';
+    ctx.fillRect(0, 0, 256, 256);
+    ctx.strokeStyle = 'rgba(100, 70, 20, 0.3)';
+    ctx.lineWidth = 1;
+    for (var y = 0; y < 256; y += 3 + Math.random() * 4) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        for (var x = 0; x < 256; x += 10) {
+            ctx.lineTo(x, y + (Math.random() - 0.5) * 2);
         }
-        if (!brainAnimating) startBrainAnimation();
+        ctx.stroke();
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
+function createMossTexture() {
+    var canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#2d5a1e';
+    ctx.fillRect(0, 0, 128, 128);
+    for (var i = 0; i < 200; i++) {
+        var x = Math.random() * 128;
+        var y = Math.random() * 128;
+        var r = 1 + Math.random() * 3;
+        var g = 80 + Math.random() * 80;
+        ctx.fillStyle = 'rgb(' + Math.floor(20 + Math.random() * 40) + ',' + Math.floor(g) + ',' + Math.floor(10 + Math.random() * 30) + ')';
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    return new THREE.CanvasTexture(canvas);
+}
+
+// ========================================================================
+// SCENE INITIALIZATION
+// ========================================================================
+function initScene() {
+    var container = document.getElementById('scene-container');
+    var w = container.clientWidth;
+    var h = container.clientHeight;
+
+    scene = new THREE.Scene();
+    scene.background = createSkyGradient();
+    scene.fog = new THREE.FogExp2(0xe0c89a, 0.025);
+
+    camera = new THREE.PerspectiveCamera(50, w / h, 0.01, 200);
+    camera.position.set(0, 6, -10);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.rotateSpeed = 0.8;
+    controls.target.set(0, 0, 0);
+    controls.maxPolarAngle = Math.PI * 0.48;
+    controls.minDistance = 3;
+    controls.maxDistance = 40;
+
+    // Lighting — warm late-afternoon
+    var ambient = new THREE.AmbientLight(0xffeedd, 0.45);
+    scene.add(ambient);
+
+    var sun = new THREE.DirectionalLight(0xffddaa, 1.0);
+    sun.position.set(6, 10, -4);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 1024;
+    sun.shadow.mapSize.height = 1024;
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 40;
+    sun.shadow.camera.left = -15;
+    sun.shadow.camera.right = 15;
+    sun.shadow.camera.top = 15;
+    sun.shadow.camera.bottom = -15;
+    scene.add(sun);
+
+    var fill = new THREE.DirectionalLight(0x8899bb, 0.25);
+    fill.position.set(-4, 4, 6);
+    scene.add(fill);
+
+    buildZenGarden();
+    buildFlyEntity();
+    loadBrain();
+
+    // Click handler
+    renderer.domElement.addEventListener('click', onSceneClick);
+    renderer.domElement.addEventListener('dblclick', resetCamera);
+
+    // Resize
+    new ResizeObserver(onResize).observe(container);
+
+    document.getElementById('scene-info').innerHTML =
+        'Drag to rotate | Scroll to zoom | Double-click to reset camera';
+
+    startAnimation();
+}
+
+// ========================================================================
+// ZEN GARDEN ENVIRONMENT
+// ========================================================================
+function buildZenGarden() {
+    var gs = GARDEN_SIZE;
+
+    // Ground plane — raked sand
+    var sandTex = createRakedSandTexture();
+    var groundGeom = new THREE.PlaneGeometry(gs * 2 + 1, gs * 2 + 1);
+    var groundMat = new THREE.MeshPhongMaterial({
+        map: sandTex,
+        color: 0xffffff,
+        shininess: 5,
+    });
+    groundMesh = new THREE.Mesh(groundGeom, groundMat);
+    groundMesh.rotation.x = -Math.PI / 2;
+    groundMesh.position.y = GROUND_Y;
+    groundMesh.receiveShadow = true;
+    scene.add(groundMesh);
+
+    // Wooden border
+    var woodTex = createWoodTexture();
+    var borderMat = new THREE.MeshPhongMaterial({ map: woodTex, color: 0xffffff, shininess: 10 });
+    var bt = 0.3, bh = 0.4;
+
+    var nb = new THREE.Mesh(new THREE.BoxGeometry(gs * 2 + bt * 2 + 1, bh, bt), borderMat);
+    nb.position.set(0, GROUND_Y + bh / 2, gs + 0.5 + bt / 2);
+    nb.castShadow = true;
+    scene.add(nb);
+
+    var sb = new THREE.Mesh(new THREE.BoxGeometry(gs * 2 + bt * 2 + 1, bh, bt), borderMat);
+    sb.position.set(0, GROUND_Y + bh / 2, -(gs + 0.5 + bt / 2));
+    sb.castShadow = true;
+    scene.add(sb);
+
+    var eb = new THREE.Mesh(new THREE.BoxGeometry(bt, bh, gs * 2 + 1), borderMat);
+    eb.position.set(gs + 0.5 + bt / 2, GROUND_Y + bh / 2, 0);
+    eb.castShadow = true;
+    scene.add(eb);
+
+    var wb = new THREE.Mesh(new THREE.BoxGeometry(bt, bh, gs * 2 + 1), borderMat);
+    wb.position.set(-(gs + 0.5 + bt / 2), GROUND_Y + bh / 2, 0);
+    wb.castShadow = true;
+    scene.add(wb);
+
+    // Basalt stones — asymmetric cluster
+    var stoneDefs = [
+        { pos: [5, GROUND_Y + 0.25, 5], scl: [0.9, 0.5, 0.75], color: 0x2a2a32 },
+        { pos: [5.9, GROUND_Y + 0.15, 4.1], scl: [0.55, 0.35, 0.45], color: 0x28282e },
+        { pos: [4.4, GROUND_Y + 0.12, 5.6], scl: [0.4, 0.28, 0.38], color: 0x2c2c34 },
+    ];
+    stoneDefs.forEach(function(s) {
+        var geom = new THREE.SphereGeometry(1, 14, 10);
+        var mat = new THREE.MeshPhongMaterial({
+            color: s.color,
+            shininess: 50,
+            specular: 0x444444,
+        });
+        var mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(s.pos[0], s.pos[1], s.pos[2]);
+        mesh.scale.set(s.scl[0], s.scl[1], s.scl[2]);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+    });
+
+    // Moss patch near stones
+    var mossGeom = new THREE.PlaneGeometry(1.8, 1.5);
+    var mossTex = createMossTexture();
+    var mossMat = new THREE.MeshPhongMaterial({
+        map: mossTex,
+        transparent: true,
+        opacity: 0.85,
+    });
+    var moss = new THREE.Mesh(mossGeom, mossMat);
+    moss.rotation.x = -Math.PI / 2;
+    moss.position.set(5.2, GROUND_Y + 0.01, 6.2);
+    scene.add(moss);
+
+    // Cherry blossom branch
+    var branchCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-7, 3.5, 7),
+        new THREE.Vector3(-5, 4.2, 5),
+        new THREE.Vector3(-3.5, 3.8, 3),
+        new THREE.Vector3(-2.5, 3.2, 1.5),
+    ]);
+    var branchGeom = new THREE.TubeGeometry(branchCurve, 20, 0.07, 6, false);
+    var branchMat = new THREE.MeshPhongMaterial({ color: 0x5c3a1e, shininess: 15 });
+    var branch = new THREE.Mesh(branchGeom, branchMat);
+    branch.castShadow = true;
+    scene.add(branch);
+
+    // Sub-branch
+    var subCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-4, 4.0, 4),
+        new THREE.Vector3(-3.2, 4.5, 3.5),
+        new THREE.Vector3(-2.8, 4.3, 2.5),
+    ]);
+    var subGeom = new THREE.TubeGeometry(subCurve, 12, 0.035, 5, false);
+    scene.add(new THREE.Mesh(subGeom, branchMat));
+
+    // Blossoms on branch
+    var blossomMat = new THREE.MeshPhongMaterial({ color: 0xf8c8d8, shininess: 20 });
+    for (var t = 0.2; t < 0.95; t += 0.12) {
+        var pt = branchCurve.getPointAt(t);
+        for (var j = 0; j < 3; j++) {
+            var blossom = new THREE.Mesh(
+                new THREE.SphereGeometry(0.06 + Math.random() * 0.04, 6, 4),
+                blossomMat
+            );
+            blossom.position.set(
+                pt.x + (Math.random() - 0.5) * 0.35,
+                pt.y + Math.random() * 0.25,
+                pt.z + (Math.random() - 0.5) * 0.35
+            );
+            scene.add(blossom);
+        }
+    }
+
+    // Fallen petals on sand
+    var petalGeom = new THREE.CircleGeometry(0.12, 5);
+    var petalMat = new THREE.MeshPhongMaterial({
+        color: 0xf5b7c5,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.75,
+    });
+    for (var i = 0; i < 18; i++) {
+        var petal = new THREE.Mesh(petalGeom, petalMat.clone());
+        petal.position.set(
+            -6 + Math.random() * 7,
+            GROUND_Y + 0.01,
+            1 + Math.random() * 7
+        );
+        petal.rotation.set(-Math.PI / 2 + (Math.random() - 0.5) * 0.3, 0, Math.random() * Math.PI * 2);
+        petal.scale.setScalar(0.5 + Math.random() * 0.6);
+        scene.add(petal);
+    }
+
+    // Shoji screen suggestion (backlit plane in background)
+    var shojiGeom = new THREE.PlaneGeometry(22, 8);
+    var shojiMat = new THREE.MeshBasicMaterial({
+        color: 0xfff5e6,
+        transparent: true,
+        opacity: 0.08,
+        side: THREE.DoubleSide,
+    });
+    var shoji = new THREE.Mesh(shojiGeom, shojiMat);
+    shoji.position.set(0, 2.5, gs + 3);
+    scene.add(shoji);
+
+    // Grid lines on shoji
+    for (var gx = -4; gx <= 4; gx += 2) {
+        var lineGeom = new THREE.PlaneGeometry(0.04, 7.5);
+        var lineMat = new THREE.MeshBasicMaterial({ color: 0xd4c4a0, transparent: true, opacity: 0.06 });
+        var line = new THREE.Mesh(lineGeom, lineMat);
+        line.position.set(gx * 1.2, 2.5, gs + 2.99);
+        scene.add(line);
     }
 }
 
-// ---- 3D Brain ----
-const MAX_GLOW = 5000;  // max active neurons to display in glow layer
+// ========================================================================
+// FLY ENTITY (GLB Model from TuragaLab/flybody)
+// ========================================================================
+var flyHeadCenter = null;
+var flyHeadSize = null;
 
-function initBrain3D() {
-    const container = document.getElementById('brain-container');
-    const w = container.clientWidth;
-    const h = container.clientHeight;
+function buildFlyEntity() {
+    flyEntity = new THREE.Group();
+    flyEntity.position.set(0, 0, 0);
+    scene.add(flyEntity);
 
-    brainScene = new THREE.Scene();
-    brainScene.background = new THREE.Color(0x050510);
+    flyBodyGroup = new THREE.Group();
+    flyEntity.add(flyBodyGroup);
 
-    brainCamera = new THREE.PerspectiveCamera(50, w / h, 0.01, 100);
-    brainCamera.position.set(0, 0, 2.5);
+    flyMeshMap = {};
+    flyClickTargets = [];
+    flyStimHighlights = [];
 
-    brainRenderer = new THREE.WebGLRenderer({ antialias: true });
-    brainRenderer.setSize(w, h);
-    brainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    container.appendChild(brainRenderer.domElement);
+    // Brain group — will be positioned after head mesh loads
+    brainGroup = new THREE.Group();
+    flyEntity.add(brainGroup);
 
-    brainControls = new THREE.OrbitControls(brainCamera, brainRenderer.domElement);
-    brainControls.enableDamping = true;
-    brainControls.dampingFactor = 0.1;
-    brainControls.rotateSpeed = 0.8;
-    brainControls.autoRotate = false;
-    brainControls.autoRotateSpeed = 0.5;
+    loadFlyModel();
+}
 
-    brainInitialized = true;
+function loadFlyModel() {
+    var loader = new THREE.GLTFLoader();
+    loader.load('/static/models/flybody.glb', function(gltf) {
+        var model = gltf.scene;
 
-    // Fetch positions
+        // Stimulus mapping by body name
+        var bodyStimMap = {
+            'antenna_left': 'Tickle (left antenna)',
+            'antenna_right': 'Tickle (right antenna)',
+            'rostrum': 'Sugar (proboscis)',
+            'haustellum': 'Sugar (proboscis)',
+            'labrum_left': 'Sugar (left proboscis)',
+            'labrum_right': 'Sugar (right proboscis)',
+        };
+
+        model.traverse(function(child) {
+            if (!child.isMesh) return;
+
+            var nodeName = child.name;
+            var parts = nodeName.split('__');
+            var bodyName = parts[0] || nodeName;
+            var meshName = parts[1] || nodeName;
+
+            // Determine opacity by body region
+            var opacity = 0.35;
+            if (bodyName === 'head' || bodyName === 'thorax') opacity = 0.25;
+            else if (bodyName.indexOf('abdomen') === 0) opacity = 0.25;
+            else if (bodyName.indexOf('wing') === 0) opacity = 0.18;
+            else if (bodyName.indexOf('haltere') === 0) opacity = 0.5;
+            else if (bodyName.indexOf('antenna') === 0) opacity = 0.6;
+            else if (bodyName === 'rostrum' || bodyName === 'haustellum') opacity = 0.6;
+            else if (bodyName.indexOf('labrum') === 0) opacity = 0.6;
+            else if (bodyName.match(/coxa|femur|tibia|tarsus|claw/)) opacity = 0.55;
+
+            // Special overrides by mesh name
+            if (meshName === 'head_red') opacity = 0.45;
+            if (meshName.indexOf('membrane') !== -1) opacity = 0.18;
+
+            // Check for vertex colors from GLB
+            var hasVertexColors = child.geometry && child.geometry.attributes &&
+                                  child.geometry.attributes.color;
+
+            // Replace material with transparent Phong
+            child.material = new THREE.MeshPhongMaterial({
+                vertexColors: hasVertexColors,
+                color: hasVertexColors ? 0xffffff : 0x8c5924,
+                emissive: 0x000000,
+                shininess: 30,
+                transparent: true,
+                opacity: opacity,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                flatShading: false,
+            });
+            child.castShadow = true;
+
+            // Store in mesh map
+            flyMeshMap[nodeName] = child;
+
+            // Determine stimulus name
+            var stimName = null;
+            if (bodyStimMap[bodyName] !== undefined) {
+                stimName = bodyStimMap[bodyName];
+            } else if (meshName === 'head_red') {
+                stimName = 'Light (left eye)';
+            } else if (bodyName.match(/_left/) && bodyName.match(/coxa|femur|tibia|tarsus|claw/)) {
+                stimName = 'Touch (left leg/body)';
+            } else if (bodyName.match(/_right/) && bodyName.match(/coxa|femur|tibia|tarsus|claw/)) {
+                stimName = 'Touch (right leg/body)';
+            } else if (bodyName === 'wing_left') {
+                stimName = 'Touch (left leg/body)';
+            } else if (bodyName === 'wing_right') {
+                stimName = 'Touch (right leg/body)';
+            }
+
+            child.userData.stimName = stimName;
+            if (stimName) flyClickTargets.push(child);
+        });
+
+        flyBodyGroup.add(model);
+
+        // Compute head bounding box for brain positioning
+        computeHeadBounds();
+
+        // Setup leg animation groups
+        setupLegAnimation();
+
+        // Reposition brain if it already loaded before the model
+        if (brainPoints) repositionBrainInHead();
+
+        console.log('Flybody model loaded: ' + Object.keys(flyMeshMap).length + ' meshes');
+    }, undefined, function(error) {
+        console.error('Failed to load flybody GLB:', error);
+    });
+}
+
+function computeHeadBounds() {
+    var box = new THREE.Box3();
+    var found = false;
+    for (var key in flyMeshMap) {
+        if (key.startsWith('head__')) {
+            var meshBox = new THREE.Box3().setFromObject(flyMeshMap[key]);
+            box.union(meshBox);
+            found = true;
+        }
+    }
+    if (found) {
+        flyHeadCenter = new THREE.Vector3();
+        box.getCenter(flyHeadCenter);
+        flyHeadSize = new THREE.Vector3();
+        box.getSize(flyHeadSize);
+    } else {
+        flyHeadCenter = new THREE.Vector3(0, -0.2, 0.65);
+        flyHeadSize = new THREE.Vector3(0.8, 0.5, 0.5);
+    }
+}
+
+function repositionBrainInHead() {
+    if (!flyHeadCenter || !flyHeadSize || !brainPositions) return;
+
+    var bMin = [Infinity, Infinity, Infinity];
+    var bMax = [-Infinity, -Infinity, -Infinity];
+    for (var i = 0; i < brainPositions.length; i += 3) {
+        for (var j = 0; j < 3; j++) {
+            bMin[j] = Math.min(bMin[j], brainPositions[i + j]);
+            bMax[j] = Math.max(bMax[j], brainPositions[i + j]);
+        }
+    }
+    var bSize = [bMax[0] - bMin[0], bMax[1] - bMin[1], bMax[2] - bMin[2]];
+    var bCenter = [(bMin[0] + bMax[0]) / 2, (bMin[1] + bMax[1]) / 2, (bMin[2] + bMax[2]) / 2];
+
+    // Scale brain to fit inside head (85% of head dimensions)
+    var headTarget = [flyHeadSize.x * 0.85, flyHeadSize.y * 0.85, flyHeadSize.z * 0.85];
+    var sX = bSize[0] > 0 ? headTarget[0] / bSize[0] : 0.3;
+    var sY = bSize[1] > 0 ? headTarget[1] / bSize[1] : 0.3;
+    var sZ = bSize[2] > 0 ? headTarget[2] / bSize[2] : 0.3;
+
+    brainGroup.scale.set(sX, sY, sZ);
+    brainGroup.position.set(
+        flyHeadCenter.x - bCenter[0] * sX,
+        flyHeadCenter.y - bCenter[1] * sY,
+        flyHeadCenter.z - bCenter[2] * sZ
+    );
+}
+
+function setupLegAnimation() {
+    legAnimA = [];
+    legAnimB = [];
+    // Tripod A: front-left (T1_left), mid-right (T2_right), hind-left (T3_left)
+    // Tripod B: front-right (T1_right), mid-left (T2_left), hind-right (T3_right)
+    var groupA = ['T1_left', 'T2_right', 'T3_left'];
+    var groupB = ['T1_right', 'T2_left', 'T3_right'];
+
+    for (var key in flyMeshMap) {
+        var bodyName = key.split('__')[0];
+        if (!bodyName.match(/coxa|femur|tibia|tarsus|claw/)) continue;
+
+        var mesh = flyMeshMap[key];
+        if (mesh.userData.baseY === undefined) mesh.userData.baseY = mesh.position.y;
+
+        var isA = groupA.some(function(g) { return bodyName.indexOf(g) !== -1; });
+        var isB = groupB.some(function(g) { return bodyName.indexOf(g) !== -1; });
+        if (isA) legAnimA.push(mesh);
+        else if (isB) legAnimB.push(mesh);
+    }
+}
+
+// ========================================================================
+// BRAIN POINT CLOUD
+// ========================================================================
+function loadBrain() {
     fetch('/api/positions')
-        .then(r => r.json())
-        .then(data => {
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
             brainN = data.n_neurons;
-            document.getElementById('brain-info').innerHTML =
-                `${brainN.toLocaleString()} neurons<br>Drag to rotate | Scroll to zoom`;
 
-            // Decode positions from base64
+            // Decode positions
             if (data.positions_b64) {
-                const raw = atob(data.positions_b64);
-                const buf = new ArrayBuffer(raw.length);
-                const view = new Uint8Array(buf);
-                for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
-                brainPositions = new Float32Array(buf); // [N*3]
+                var raw = atob(data.positions_b64);
+                var buf = new ArrayBuffer(raw.length);
+                var view = new Uint8Array(buf);
+                for (var i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+                brainPositions = new Float32Array(buf);
 
-                // Uniform normalization (center + scale to [-1,1] by largest axis)
-                // then proportional Z stretch to fix FAFB voxel anisotropy (4x4x40nm)
-                let mnX = Infinity, mxX = -Infinity;
-                let mnY = Infinity, mxY = -Infinity;
-                let mnZ = Infinity, mxZ = -Infinity;
-                for (let i = 0; i < brainPositions.length; i += 3) {
-                    const x = brainPositions[i], y = brainPositions[i+1], z = brainPositions[i+2];
+                // Normalize (same as before)
+                var mnX = Infinity, mxX = -Infinity;
+                var mnY = Infinity, mxY = -Infinity;
+                var mnZ = Infinity, mxZ = -Infinity;
+                for (var i = 0; i < brainPositions.length; i += 3) {
+                    var x = brainPositions[i], y = brainPositions[i + 1], z = brainPositions[i + 2];
                     if (x < mnX) mnX = x; if (x > mxX) mxX = x;
                     if (y < mnY) mnY = y; if (y > mxY) mxY = y;
                     if (z < mnZ) mnZ = z; if (z > mxZ) mxZ = z;
                 }
-                const cX = (mnX + mxX) / 2, cY = (mnY + mxY) / 2, cZ = (mnZ + mxZ) / 2;
-                const rangeX = (mxX - mnX) / 2 || 1;
-                const rangeY = (mxY - mnY) / 2 || 1;
-                const rangeZ = (mxZ - mnZ) / 2 || 1;
-                const uniformScale = Math.max(rangeX, rangeY, rangeZ);
-                const Z_STRETCH = 10.0; // FAFB voxel anisotropy correction: 40nm/4nm = 10x
-                for (let i = 0; i < brainPositions.length; i += 3) {
-                    brainPositions[i]     = -((brainPositions[i]     - cX) / uniformScale); // negate X: FAFB image is L/R inverted
+                var cX = (mnX + mxX) / 2, cY = (mnY + mxY) / 2, cZ = (mnZ + mxZ) / 2;
+                var rangeX = (mxX - mnX) / 2 || 1;
+                var rangeY = (mxY - mnY) / 2 || 1;
+                var rangeZ = (mxZ - mnZ) / 2 || 1;
+                var uniformScale = Math.max(rangeX, rangeY, rangeZ);
+                var Z_STRETCH = 10.0;
+                for (var i = 0; i < brainPositions.length; i += 3) {
+                    brainPositions[i] = -((brainPositions[i] - cX) / uniformScale);
                     brainPositions[i + 1] = (brainPositions[i + 1] - cY) / uniformScale;
                     brainPositions[i + 2] = (brainPositions[i + 2] - cZ) / uniformScale * Z_STRETCH;
                 }
             } else {
                 brainPositions = new Float32Array(brainN * 3);
-                for (let i = 0; i < brainN * 3; i++) brainPositions[i] = (Math.random() - 0.5) * 2;
+                for (var i = 0; i < brainN * 3; i++) brainPositions[i] = (Math.random() - 0.5) * 2;
             }
 
-            // Decode class colors
+            // Position brain inside head (dynamic — uses GLB head bounds if loaded)
+            repositionBrainInHead();
+
+            // Class colors
             brainBaseColors = new Float32Array(brainN * 3);
             if (data.classes && data.classes.ids_b64) {
                 brainClassLabels = data.classes.labels;
-                const rawIds = atob(data.classes.ids_b64);
-                const classIds = new Uint8Array(rawIds.length);
-                for (let i = 0; i < rawIds.length; i++) classIds[i] = rawIds.charCodeAt(i);
+                var rawIds = atob(data.classes.ids_b64);
+                var classIds = new Uint8Array(rawIds.length);
+                for (var i = 0; i < rawIds.length; i++) classIds[i] = rawIds.charCodeAt(i);
 
-                for (let i = 0; i < brainN; i++) {
-                    const cid = classIds[i] || 0;
-                    const c = CLASS_COLORS[cid % CLASS_COLORS.length];
-                    brainBaseColors[i * 3]     = c[0] * DIM_ALPHA;
+                for (var i = 0; i < brainN; i++) {
+                    var cid = classIds[i] || 0;
+                    var c = CLASS_COLORS[cid % CLASS_COLORS.length];
+                    brainBaseColors[i * 3] = c[0] * DIM_ALPHA;
                     brainBaseColors[i * 3 + 1] = c[1] * DIM_ALPHA;
                     brainBaseColors[i * 3 + 2] = c[2] * DIM_ALPHA;
                 }
                 buildBrainLegend(brainClassLabels);
             } else {
-                for (let i = 0; i < brainN * 3; i++) brainBaseColors[i] = 0.15;
+                for (var i = 0; i < brainN * 3; i++) brainBaseColors[i] = 0.15;
             }
 
-            // --- Base layer: all neurons, dim colors, small points ---
-            const baseGeom = new THREE.BufferGeometry();
+            // Base layer (rendered opaque for correct transparency ordering)
+            var baseGeom = new THREE.BufferGeometry();
             baseGeom.setAttribute('position', new THREE.BufferAttribute(brainPositions, 3));
             baseGeom.setAttribute('color', new THREE.BufferAttribute(brainBaseColors, 3));
-            const baseMat = new THREE.PointsMaterial({
+            var baseMat = new THREE.PointsMaterial({
                 size: 0.007,
                 vertexColors: true,
-                transparent: true,
-                opacity: 0.85,
-                depthWrite: false,
+                transparent: false,
+                depthWrite: true,
+                sizeAttenuation: true,
             });
             brainPoints = new THREE.Points(baseGeom, baseMat);
-            brainScene.add(brainPoints);
+            brainPoints.renderOrder = 0;
+            brainGroup.add(brainPoints);
 
-            // --- Glow layer: active neurons, larger + additive blending ---
-            const glowPos = new Float32Array(MAX_GLOW * 3);
+            // Glow layer (active neurons)
+            var glowPos = new Float32Array(MAX_GLOW * 3);
             brainGlowColors = new Float32Array(MAX_GLOW * 3);
-            const glowGeom = new THREE.BufferGeometry();
+            var glowGeom = new THREE.BufferGeometry();
             glowGeom.setAttribute('position', new THREE.BufferAttribute(glowPos, 3));
             glowGeom.setAttribute('color', new THREE.BufferAttribute(brainGlowColors, 3));
-            glowGeom.setDrawRange(0, 0); // initially hidden
-            const glowMat = new THREE.PointsMaterial({
-                size: 0.0225,
+            glowGeom.setDrawRange(0, 0);
+            var glowMat = new THREE.PointsMaterial({
+                size: 0.022,
                 vertexColors: true,
                 transparent: true,
-                opacity: 0.5,
+                opacity: 0.6,
                 depthWrite: false,
                 blending: THREE.AdditiveBlending,
+                sizeAttenuation: true,
             });
             brainGlowPoints = new THREE.Points(glowGeom, glowMat);
-            brainScene.add(brainGlowPoints);
-
-            startBrainAnimation();
+            brainGlowPoints.renderOrder = 1;
+            brainGroup.add(brainGlowPoints);
         })
-        .catch(err => {
-            document.getElementById('brain-info').textContent = 'Failed to load positions: ' + err;
+        .catch(function(err) {
+            console.warn('Failed to load brain positions:', err);
         });
-}
-
-function buildBrainLegend(labels) {
-    const container = document.getElementById('brain-legend');
-    container.innerHTML = '';
-    labels.forEach((label, i) => {
-        const c = CLASS_COLORS[i % CLASS_COLORS.length];
-        const item = document.createElement('span');
-        item.className = 'legend-item';
-        const dot = document.createElement('span');
-        dot.className = 'legend-dot';
-        dot.style.backgroundColor = `rgb(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)})`;
-        item.appendChild(dot);
-        item.appendChild(document.createTextNode(label));
-        container.appendChild(item);
-    });
 }
 
 function updateBrainActivity(activeIndices) {
     if (!brainGlowPoints || !brainPositions) return;
 
-    const glowPosAttr = brainGlowPoints.geometry.attributes.position;
-    const glowColAttr = brainGlowPoints.geometry.attributes.color;
-    const glowPos = glowPosAttr.array;
-    const glowCol = glowColAttr.array;
+    var glowPosAttr = brainGlowPoints.geometry.attributes.position;
+    var glowColAttr = brainGlowPoints.geometry.attributes.color;
+    var glowPos = glowPosAttr.array;
+    var glowCol = glowColAttr.array;
 
-    let count = 0;
+    var count = 0;
     if (activeIndices && activeIndices.length > 0) {
-        const limit = Math.min(activeIndices.length, MAX_GLOW);
-        for (let j = 0; j < limit; j++) {
-            const idx = activeIndices[j];
+        var limit = Math.min(activeIndices.length, MAX_GLOW);
+        for (var j = 0; j < limit; j++) {
+            var idx = activeIndices[j];
             if (idx >= 0 && idx < brainN) {
-                glowPos[count * 3]     = brainPositions[idx * 3];
+                glowPos[count * 3] = brainPositions[idx * 3];
                 glowPos[count * 3 + 1] = brainPositions[idx * 3 + 1];
                 glowPos[count * 3 + 2] = brainPositions[idx * 3 + 2];
-                glowCol[count * 3]     = GLOW_COLOR[0];
+                glowCol[count * 3] = GLOW_COLOR[0];
                 glowCol[count * 3 + 1] = GLOW_COLOR[1];
                 glowCol[count * 3 + 2] = GLOW_COLOR[2];
                 count++;
@@ -915,55 +1337,438 @@ function updateBrainActivity(activeIndices) {
     glowColAttr.needsUpdate = true;
 }
 
-function startBrainAnimation() {
-    if (brainAnimating) return;
-    brainAnimating = true;
-    function animate() {
-        if (!brainAnimating) return;
-        requestAnimationFrame(animate);
-        if (brainControls) brainControls.update();
-        if (brainRenderer && brainScene && brainCamera) {
-            brainRenderer.render(brainScene, brainCamera);
+function buildBrainLegend(labels) {
+    var container = document.getElementById('brain-legend');
+    container.innerHTML = '';
+    labels.forEach(function(label, i) {
+        var c = CLASS_COLORS[i % CLASS_COLORS.length];
+        var item = document.createElement('span');
+        item.className = 'legend-item';
+        var dot = document.createElement('span');
+        dot.className = 'legend-dot';
+        dot.style.backgroundColor = 'rgb(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ')';
+        item.appendChild(dot);
+        item.appendChild(document.createTextNode(label));
+        container.appendChild(item);
+    });
+}
+
+// ========================================================================
+// FLY MOVEMENT
+// ========================================================================
+function updateFlyMovement(dt) {
+    if (!lastMotorRates || !flyEntity) return;
+
+    var left = lastMotorRates.descending_left || 0;
+    var right = lastMotorRates.descending_right || 0;
+
+    var forwardRate = (left + right) / 2;
+    var turnRate = (left - right);
+
+    // Only move when motor neurons fire
+    if (forwardRate < 0.001 && Math.abs(turnRate) < 0.001) {
+        flySpeed = 0;
+        return;
+    }
+
+    var moveScale = 80 * speedMultiplier;
+    var turnScale = 30;
+
+    flySpeed = forwardRate * moveScale;
+    flyAngle += turnRate * turnScale * dt;
+
+    flyPos.x += Math.sin(flyAngle) * flySpeed * dt;
+    flyPos.z += Math.cos(flyAngle) * flySpeed * dt;
+
+    // Clamp to garden bounds
+    var bound = GARDEN_SIZE - 0.5;
+    flyPos.x = Math.max(-bound, Math.min(bound, flyPos.x));
+    flyPos.z = Math.max(-bound, Math.min(bound, flyPos.z));
+
+    flyEntity.position.x = flyPos.x;
+    flyEntity.position.z = flyPos.z;
+    flyEntity.rotation.y = flyAngle;
+
+    // Update right panel
+    var speedEl = document.getElementById('m-flyspeed');
+    var headEl = document.getElementById('m-flyheading');
+    if (speedEl) speedEl.textContent = flySpeed.toFixed(2);
+    if (headEl) headEl.textContent = Math.round((flyAngle * 180 / Math.PI) % 360) + '\u00B0';
+}
+
+function animateLegs(dt) {
+    if (flySpeed < 0.01) {
+        // Reset to base positions when stationary
+        legAnimA.concat(legAnimB).forEach(function(m) {
+            if (m.userData.baseY !== undefined) m.position.y = m.userData.baseY;
+        });
+        return;
+    }
+
+    gaitPhase += flySpeed * dt * 12;
+
+    var liftA = Math.max(0, Math.sin(gaitPhase)) * 0.07;
+    var liftB = Math.max(0, Math.sin(gaitPhase + Math.PI)) * 0.07;
+
+    legAnimA.forEach(function(m) {
+        m.position.y = (m.userData.baseY || 0) + liftA;
+    });
+    legAnimB.forEach(function(m) {
+        m.position.y = (m.userData.baseY || 0) + liftB;
+    });
+}
+
+// ========================================================================
+// ENVIRONMENT OBJECTS (Food & Obstacles)
+// ========================================================================
+function togglePlacement(mode) {
+    var indicator = document.getElementById('placement-indicator');
+    if (placementMode === mode) {
+        placementMode = null;
+        indicator.style.display = 'none';
+        document.getElementById('btn-add-food').classList.remove('active');
+        document.getElementById('btn-add-obstacle').classList.remove('active');
+    } else {
+        placementMode = mode;
+        indicator.style.display = 'block';
+        indicator.textContent = mode === 'food' ? 'Click ground to place food' : 'Click ground to place obstacle';
+        document.getElementById('btn-add-food').classList.toggle('active', mode === 'food');
+        document.getElementById('btn-add-obstacle').classList.toggle('active', mode === 'obstacle');
+    }
+}
+
+function addFood(pos) {
+    // Berry-like sphere
+    var geom = new THREE.SphereGeometry(0.25, 10, 8);
+    var mat = new THREE.MeshPhongMaterial({
+        color: 0xcc5544,
+        shininess: 30,
+        emissive: 0x220808,
+    });
+    var mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(pos.x, GROUND_Y + 0.2, pos.z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    envObjects.push({ mesh: mesh, type: 'food', radius: 0.25, x: pos.x, z: pos.z });
+    updateEnvStatus();
+}
+
+function addObstacle(pos) {
+    // Stone-like shape
+    var geom = new THREE.SphereGeometry(0.5, 10, 8);
+    var mat = new THREE.MeshPhongMaterial({
+        color: 0x3a3a42,
+        shininess: 40,
+        specular: 0x333333,
+    });
+    var mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(pos.x, GROUND_Y + 0.25, pos.z);
+    mesh.scale.set(1, 0.6, 0.85);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    envObjects.push({ mesh: mesh, type: 'obstacle', radius: 0.5, x: pos.x, z: pos.z });
+    updateEnvStatus();
+}
+
+function clearEnvironment() {
+    envObjects.forEach(function(obj) {
+        scene.remove(obj.mesh);
+        if (obj.mesh.geometry) obj.mesh.geometry.dispose();
+        if (obj.mesh.material) obj.mesh.material.dispose();
+    });
+    envObjects = [];
+    updateEnvStatus();
+}
+
+function updateEnvStatus() {
+    var food = envObjects.filter(function(o) { return o.type === 'food'; }).length;
+    var obs = envObjects.filter(function(o) { return o.type === 'obstacle'; }).length;
+    document.getElementById('env-status').textContent =
+        food + ' food, ' + obs + ' obstacles placed';
+}
+
+function updateEnvironment(dt) {
+    var attractRange = 5;
+    var contactRange = 0.6;
+    var obstacleRange = 1.0;
+
+    for (var i = envObjects.length - 1; i >= 0; i--) {
+        var obj = envObjects[i];
+        var dx = obj.x - flyPos.x;
+        var dz = obj.z - flyPos.z;
+        var dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (obj.type === 'food') {
+            // Attract fly heading toward food when within range
+            if (dist < attractRange && dist > contactRange && flySpeed > 0.01) {
+                var angleToFood = Math.atan2(dx, dz);
+                var angleDiff = angleToFood - flyAngle;
+                // Normalize to [-PI, PI]
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                flyAngle += angleDiff * 1.5 * dt;
+                flyEntity.rotation.y = flyAngle;
+            }
+
+            // Eat food on contact
+            if (dist < contactRange) {
+                // Trigger gustatory stimulus
+                if (ws && ws.readyState === 1) {
+                    ws.send(JSON.stringify({ cmd: 'stimulus_preset', name: 'Sugar (proboscis)', amplitude: 1.0 }));
+                }
+                scene.remove(obj.mesh);
+                obj.mesh.geometry.dispose();
+                obj.mesh.material.dispose();
+                envObjects.splice(i, 1);
+                updateEnvStatus();
+            }
+        } else if (obj.type === 'obstacle') {
+            // Push fly out on collision
+            if (dist < obstacleRange && dist > 0.01) {
+                var pushX = -dx / dist;
+                var pushZ = -dz / dist;
+                var overlap = obstacleRange - dist;
+                flyPos.x += pushX * overlap * 1.1;
+                flyPos.z += pushZ * overlap * 1.1;
+                flyEntity.position.x = flyPos.x;
+                flyEntity.position.z = flyPos.z;
+            }
         }
     }
-    animate();
 }
 
-function onBrainResize() {
-    if (!brainRenderer || !brainCamera) return;
-    const container = document.getElementById('brain-container');
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    brainCamera.aspect = w / h;
-    brainCamera.updateProjectionMatrix();
-    brainRenderer.setSize(w, h);
+// ========================================================================
+// CAMERA
+// ========================================================================
+function updateCamera(dt) {
+    if (!controls) return;
+    var targetPos = new THREE.Vector3(flyPos.x, 0, flyPos.z);
+    controls.target.lerp(targetPos, 2.0 * dt);
 }
 
-// ---- Mini Stimulus Body Map (left panel) ----
+function resetCamera() {
+    if (!camera || !controls) return;
+    camera.position.set(flyPos.x, 6, flyPos.z - 10);
+    controls.target.set(flyPos.x, 0, flyPos.z);
+}
+
+// ========================================================================
+// ANIMATION LOOP
+// ========================================================================
+function startAnimation() {
+    lastFrameTime = performance.now();
+    animate(lastFrameTime);
+}
+
+function animate(time) {
+    requestAnimationFrame(animate);
+
+    var dt = Math.min((time - lastFrameTime) / 1000, 0.05);
+    lastFrameTime = time;
+
+    updateFlyMovement(dt);
+    animateLegs(dt);
+    updateEnvironment(dt);
+    updateCamera(dt);
+
+    if (controls) controls.update();
+    if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+    }
+}
+
+function onResize() {
+    var container = document.getElementById('scene-container');
+    if (!container || !renderer || !camera) return;
+    var w = container.clientWidth;
+    var h = container.clientHeight;
+    if (w > 0 && h > 0) {
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    }
+}
+
+// ========================================================================
+// CLICK HANDLING
+// ========================================================================
+function onSceneClick(event) {
+    var container = document.getElementById('scene-container');
+    var rect = renderer.domElement.getBoundingClientRect();
+    var mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+
+    var raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, camera);
+
+    // Placement mode — place on ground
+    if (placementMode && groundMesh) {
+        var groundHits = raycaster.intersectObject(groundMesh);
+        if (groundHits.length > 0) {
+            var pt = groundHits[0].point;
+            if (placementMode === 'food') {
+                addFood({ x: pt.x, z: pt.z });
+            } else {
+                addObstacle({ x: pt.x, z: pt.z });
+            }
+            togglePlacement(placementMode); // exit placement mode
+            return;
+        }
+    }
+
+    // Click fly body to stimulate
+    var hits = raycaster.intersectObjects(flyClickTargets, false);
+    if (hits.length > 0) {
+        var stimName = hits[0].object.userData.stimName;
+        if (stimName) stimulateBodyPart(stimName);
+    }
+}
+
+// ========================================================================
+// STIMULUS
+// ========================================================================
+function stimulateBodyPart(stimName) {
+    var amp = parseFloat(document.getElementById('stim-amp').value);
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ cmd: 'stimulus_preset', name: stimName, amplitude: amp }));
+        activeStimulus = stimName;
+        document.getElementById('stim-status').textContent = 'Active: ' + stimName;
+        highlightStimulated(stimName);
+    }
+}
+
+function highlightStimulated(stimName) {
+    clearFlyStimHighlight();
+
+    // Highlight all meshes whose userData.stimName matches
+    for (var key in flyMeshMap) {
+        var mesh = flyMeshMap[key];
+        if (mesh.userData.stimName !== stimName) continue;
+        if (!mesh.geometry) continue;
+        var edges = new THREE.EdgesGeometry(mesh.geometry);
+        var line = new THREE.LineSegments(edges,
+            new THREE.LineBasicMaterial({ color: 0x34d399, linewidth: 1 })
+        );
+        line.position.copy(mesh.position);
+        line.rotation.copy(mesh.rotation);
+        line.scale.copy(mesh.scale);
+        flyBodyGroup.add(line);
+        flyStimHighlights.push(line);
+    }
+
+    // Odor stimuli also highlight antenna meshes
+    var odorToAntenna = {
+        'Odor (left antenna)': 'Tickle (left antenna)',
+        'Odor (right antenna)': 'Tickle (right antenna)',
+        'Odor (both antennae)': null, // both
+    };
+    if (odorToAntenna[stimName] !== undefined) {
+        var antennaStims = odorToAntenna[stimName]
+            ? [odorToAntenna[stimName]]
+            : ['Tickle (left antenna)', 'Tickle (right antenna)'];
+        antennaStims.forEach(function(s) {
+            for (var key in flyMeshMap) {
+                var mesh = flyMeshMap[key];
+                if (mesh.userData.stimName !== s) continue;
+                if (!mesh.geometry) continue;
+                var edges = new THREE.EdgesGeometry(mesh.geometry);
+                var line = new THREE.LineSegments(edges,
+                    new THREE.LineBasicMaterial({ color: 0x34d399, linewidth: 1 })
+                );
+                line.position.copy(mesh.position);
+                line.rotation.copy(mesh.rotation);
+                line.scale.copy(mesh.scale);
+                flyBodyGroup.add(line);
+                flyStimHighlights.push(line);
+            }
+        });
+    }
+
+    document.querySelectorAll('.stim-zone').forEach(function(z) { z.classList.remove('stim-active'); });
+}
+
+function clearFlyStimHighlight() {
+    if (!flyBodyGroup) return;
+    flyStimHighlights.forEach(function(line) {
+        flyBodyGroup.remove(line);
+        line.geometry.dispose();
+        line.material.dispose();
+    });
+    flyStimHighlights = [];
+}
+
+function updateFlyMotorColors(motorRates) {
+    if (!motorRates) return;
+
+    // Motor group → body name matching functions
+    var motorPatterns = {
+        'motor_proboscis': function(bn) { return bn === 'rostrum' || bn === 'haustellum' || bn.indexOf('labrum') === 0; },
+        'motor_antenna': function(bn) { return bn.indexOf('antenna') === 0; },
+        'motor_neck': function(bn) { return bn === 'head'; },
+        'motor_eye': function(bn, mn) { return mn === 'head_red'; },
+        'descending_left': function(bn) {
+            return (bn.indexOf('_left') !== -1 && !!bn.match(/coxa|femur|tibia|tarsus|claw/)) ||
+                   bn === 'wing_left' || bn === 'haltere_left';
+        },
+        'descending_right': function(bn) {
+            return (bn.indexOf('_right') !== -1 && !!bn.match(/coxa|femur|tibia|tarsus|claw/)) ||
+                   bn === 'wing_right' || bn === 'haltere_right';
+        },
+    };
+
+    for (var group in motorPatterns) {
+        var rate = motorRates[group] || 0;
+        var intensity = Math.min(rate / 0.08, 1.0);
+        var matchFn = motorPatterns[group];
+
+        for (var key in flyMeshMap) {
+            var parts = key.split('__');
+            var bodyName = parts[0];
+            var meshName = parts[1] || '';
+            if (!matchFn(bodyName, meshName)) continue;
+
+            var mesh = flyMeshMap[key];
+            if (!mesh || !mesh.material || !mesh.material.emissive) continue;
+            if (intensity > 0.01) {
+                mesh.material.emissive.setRGB(
+                    intensity * 0.95,
+                    intensity * 0.45,
+                    intensity * 0.05
+                );
+            } else {
+                mesh.material.emissive.setRGB(0, 0, 0);
+            }
+        }
+    }
+}
+
+// ========================================================================
+// MINI STIMULUS BODY MAP (left panel)
+// ========================================================================
 function buildStimulusMap() {
-    const container = document.getElementById('stim-body-map');
-    // Compact fly diagram: 230 x 190
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNS, 'svg');
+    var container = document.getElementById('stim-body-map');
+    var svgNS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(svgNS, 'svg');
     svg.setAttribute('viewBox', '0 0 230 195');
     svg.style.width = '100%';
 
-    const zones = [
-        // [id, stimName, shape, shapeAttrs, iconX, iconY, icon, labelX, labelY, label]
-        ['sz-ant-l', 'Tickle (left antenna)', 'ellipse', {cx:70, cy:20, rx:28, ry:13}, 70, 18, '', 70, 30, 'L Antenna'],
-        ['sz-ant-r', 'Tickle (right antenna)', 'ellipse', {cx:160, cy:20, rx:28, ry:13}, 160, 18, '', 160, 30, 'R Antenna'],
-        ['sz-odor-l', 'Odor (left antenna)', 'ellipse', {cx:42, cy:42, rx:22, ry:10}, 42, 40, '', 42, 51, 'Odor L'],
-        ['sz-odor-r', 'Odor (right antenna)', 'ellipse', {cx:188, cy:42, rx:22, ry:10}, 188, 40, '', 188, 51, 'Odor R'],
-        ['sz-eye-l', 'Light (left eye)', 'ellipse', {cx:82, cy:60, rx:20, ry:14}, 82, 58, '', 82, 72, 'L Eye'],
-        ['sz-eye-r', 'Light (right eye)', 'ellipse', {cx:148, cy:60, rx:20, ry:14}, 148, 58, '', 148, 72, 'R Eye'],
-        ['sz-proboscis', 'Sugar (proboscis)', 'ellipse', {cx:115, cy:88, rx:30, ry:12}, 115, 86, '', 115, 98, 'Proboscis'],
-        ['sz-body-l', 'Touch (left leg/body)', 'rect', {x:20, y:108, width:80, height:36, rx:6}, 60, 124, '', 60, 138, 'Touch L'],
-        ['sz-body-r', 'Touch (right leg/body)', 'rect', {x:130, y:108, width:80, height:36, rx:6}, 170, 124, '', 170, 138, 'Touch R'],
-        ['sz-odor-both', 'Odor (both antennae)', 'rect', {x:70, y:152, width:90, height:28, rx:6}, 115, 164, '', 115, 176, 'Odor Both'],
+    var zones = [
+        ['sz-ant-l', 'Tickle (left antenna)', 'ellipse', {cx:70,cy:20,rx:28,ry:13}, 70, 30, 'L Antenna'],
+        ['sz-ant-r', 'Tickle (right antenna)', 'ellipse', {cx:160,cy:20,rx:28,ry:13}, 160, 30, 'R Antenna'],
+        ['sz-odor-l', 'Odor (left antenna)', 'ellipse', {cx:42,cy:42,rx:22,ry:10}, 42, 51, 'Odor L'],
+        ['sz-odor-r', 'Odor (right antenna)', 'ellipse', {cx:188,cy:42,rx:22,ry:10}, 188, 51, 'Odor R'],
+        ['sz-eye-l', 'Light (left eye)', 'ellipse', {cx:82,cy:60,rx:20,ry:14}, 82, 72, 'L Eye'],
+        ['sz-eye-r', 'Light (right eye)', 'ellipse', {cx:148,cy:60,rx:20,ry:14}, 148, 72, 'R Eye'],
+        ['sz-proboscis', 'Sugar (proboscis)', 'ellipse', {cx:115,cy:88,rx:30,ry:12}, 115, 98, 'Proboscis'],
+        ['sz-body-l', 'Touch (left leg/body)', 'rect', {x:20,y:108,width:80,height:36,rx:6}, 60, 138, 'Touch L'],
+        ['sz-body-r', 'Touch (right leg/body)', 'rect', {x:130,y:108,width:80,height:36,rx:6}, 170, 138, 'Touch R'],
+        ['sz-odor-both', 'Odor (both antennae)', 'rect', {x:70,y:152,width:90,height:28,rx:6}, 115, 176, 'Odor Both'],
     ];
 
-    // Body outline (decorative)
-    const outline = document.createElementNS(svgNS, 'path');
+    var outline = document.createElementNS(svgNS, 'path');
     outline.setAttribute('d', 'M115,45 Q85,42 75,55 Q65,70 80,80 Q95,88 115,92 Q135,88 150,80 Q165,70 155,55 Q145,42 115,45');
     outline.setAttribute('fill', 'none');
     outline.setAttribute('stroke', '#1e293b');
@@ -971,26 +1776,20 @@ function buildStimulusMap() {
     outline.setAttribute('opacity', '0.4');
     svg.appendChild(outline);
 
-    zones.forEach(([id, stimName, shape, attrs, ix, iy, icon, lx, ly, label]) => {
-        const g = document.createElementNS(svgNS, 'g');
+    zones.forEach(function(z) {
+        var id = z[0], stimName = z[1], shape = z[2], attrs = z[3], lx = z[4], ly = z[5], label = z[6];
+        var g = document.createElementNS(svgNS, 'g');
         g.setAttribute('class', 'stim-zone');
         g.setAttribute('id', id);
-        g.addEventListener('click', () => applyStimFromMap(stimName, id));
+        g.addEventListener('click', function() { applyStimFromMap(stimName, id); });
 
-        const el = document.createElementNS(svgNS, shape);
-        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        var el = document.createElementNS(svgNS, shape);
+        for (var k in attrs) el.setAttribute(k, attrs[k]);
         g.appendChild(el);
 
-        if (icon) {
-            const ic = document.createElementNS(svgNS, 'text');
-            ic.setAttribute('x', ix); ic.setAttribute('y', iy);
-            ic.setAttribute('class', 'stim-zone-icon');
-            ic.textContent = icon;
-            g.appendChild(ic);
-        }
-
-        const txt = document.createElementNS(svgNS, 'text');
-        txt.setAttribute('x', lx); txt.setAttribute('y', ly);
+        var txt = document.createElementNS(svgNS, 'text');
+        txt.setAttribute('x', lx);
+        txt.setAttribute('y', ly);
         txt.setAttribute('class', 'stim-zone-label');
         txt.textContent = label;
         g.appendChild(txt);
@@ -1003,523 +1802,130 @@ function buildStimulusMap() {
 }
 
 function applyStimFromMap(stimName, zoneId) {
-    const amp = parseFloat(document.getElementById('stim-amp').value);
+    var amp = parseFloat(document.getElementById('stim-amp').value);
     if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({cmd: 'stimulus_preset', name: stimName, amplitude: amp}));
+        ws.send(JSON.stringify({ cmd: 'stimulus_preset', name: stimName, amplitude: amp }));
         activeStimulus = stimName;
         document.getElementById('stim-status').textContent = 'Active: ' + stimName;
 
-        // Highlight active zone
-        document.querySelectorAll('.stim-zone').forEach(z => z.classList.remove('stim-active'));
-        const zone = document.getElementById(zoneId);
+        document.querySelectorAll('.stim-zone').forEach(function(z) { z.classList.remove('stim-active'); });
+        var zone = document.getElementById(zoneId);
         if (zone) zone.classList.add('stim-active');
 
-        // Also highlight right-panel fly
         highlightStimulated(stimName);
     }
 }
 
 function injectCustomStimulus() {
-    const amp = parseFloat(document.getElementById('stim-amp').value);
-    const start = parseInt(document.getElementById('stim-start').value) || 0;
-    const end = parseInt(document.getElementById('stim-end').value) || 1000;
-    const indices = [];
-    for (let i = start; i < end; i++) indices.push(i);
+    var amp = parseFloat(document.getElementById('stim-amp').value);
+    var start = parseInt(document.getElementById('stim-start').value) || 0;
+    var end = parseInt(document.getElementById('stim-end').value) || 1000;
+    var indices = [];
+    for (var i = start; i < end; i++) indices.push(i);
     if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({cmd: 'stimulus', indices, amplitude: amp}));
-        activeStimulus = `Custom ${start}-${end}`;
+        ws.send(JSON.stringify({ cmd: 'stimulus', indices: indices, amplitude: amp }));
+        activeStimulus = 'Custom ' + start + '-' + end;
         document.getElementById('stim-status').textContent = 'Active: ' + activeStimulus;
     }
 }
 
-// ---- 3D Fly Body ----
-function initFly3D(container, info) {
-    // Dispose previous if re-initializing
-    if (flyRenderer) {
-        flyScene.traverse(obj => {
-            if (obj.geometry) obj.geometry.dispose();
-            if (obj.material) {
-                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                else obj.material.dispose();
-            }
-        });
-        flyRenderer.dispose();
-    }
-    container.innerHTML = '';
-
-    const w = container.clientWidth || 288;
-    const h = container.clientHeight || 280;
-
-    flyRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    flyRenderer.setSize(w, h);
-    flyRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    flyRenderer.setClearColor(0x0f172a, 1);
-    container.appendChild(flyRenderer.domElement);
-    flyRenderer.domElement.style.borderRadius = '8px';
-
-    flyScene = new THREE.Scene();
-
-    // Narrow FOV for near-isometric look
-    flyCamera = new THREE.PerspectiveCamera(22, w / h, 0.1, 100);
-    flyCamera.position.set(2, 7, -6);  // behind the fly, dorsal-iso view, small X offset
-    flyCamera.lookAt(0, -0.15, -0.2);
-
-    // Lighting
-    flyScene.add(new THREE.AmbientLight(0x556677, 0.7));
-    const dirLight = new THREE.DirectionalLight(0xaabbcc, 0.9);
-    dirLight.position.set(2, 8, -5);
-    flyScene.add(dirLight);
-    const fillLight = new THREE.DirectionalLight(0x445566, 0.3);
-    fillLight.position.set(-2, 3, 4);
-    flyScene.add(fillLight);
-
-    flyBodyGroup = new THREE.Group();
-    flyMeshMap = {};
-    flyClickTargets = [];
-    flyStimHighlights = [];
-    buildFlyBody3D();
-    flyBodyGroup.scale.set(-1, 1, 1); // mirror X so fly's left = viewer's left in dorsal view
-    flyScene.add(flyBodyGroup);
-
-    // Raycasting for click-to-stimulate
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    flyRenderer.domElement.style.cursor = 'pointer';
-    flyRenderer.domElement.addEventListener('click', (event) => {
-        const rect = flyRenderer.domElement.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        raycaster.setFromCamera(mouse, flyCamera);
-        const intersects = raycaster.intersectObjects(flyClickTargets, false);
-        if (intersects.length > 0) {
-            const stimName = intersects[0].object.userData.stimName;
-            if (stimName) stimulateBodyPart(stimName);
-        }
-    });
-
-    flyNeedsRender = true;
-    renderFly();
-    flyInitialized = true;
-
-    // Resize handler
-    new ResizeObserver(() => {
-        const nw = container.clientWidth;
-        const nh = container.clientHeight;
-        if (nw > 0 && nh > 0) {
-            flyCamera.aspect = nw / nh;
-            flyCamera.updateProjectionMatrix();
-            flyRenderer.setSize(nw, nh);
-            flyNeedsRender = true;
-            renderFly();
-        }
-    }).observe(container);
-}
-
-function renderFly() {
-    if (!flyNeedsRender || !flyRenderer) return;
-    flyRenderer.render(flyScene, flyCamera);
-    flyNeedsRender = false;
-}
-
-function makeFlyMat(color, opts) {
-    return new THREE.MeshPhongMaterial({
-        color: color,
-        emissive: 0x000000,
-        shininess: (opts && opts.shininess) || 30,
-        transparent: (opts && opts.transparent) || false,
-        opacity: (opts && opts.opacity) || 1.0,
-        side: THREE.DoubleSide, // needed because flyBodyGroup is X-mirrored
-        depthWrite: (opts && opts.transparent) ? false : true,
-        flatShading: false,
-    });
-}
-
-function addFlyMesh(name, geometry, material, pos, rot, scl, stimName) {
-    const mesh = new THREE.Mesh(geometry, material);
-    if (pos) mesh.position.set(pos[0], pos[1], pos[2]);
-    if (rot) mesh.rotation.set(rot[0], rot[1], rot[2]);
-    if (scl) mesh.scale.set(scl[0], scl[1], scl[2]);
-    mesh.name = name;
-    mesh.userData.stimName = stimName || null;
-    flyBodyGroup.add(mesh);
-    flyMeshMap[name] = mesh;
-    if (stimName) flyClickTargets.push(mesh);
-    return mesh;
-}
-
-function addFlyHitbox(parent, geometry, pos, rot, scl, stimName) {
-    const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
-    const hb = new THREE.Mesh(geometry, mat);
-    if (pos) hb.position.set(pos[0], pos[1], pos[2]);
-    if (rot) hb.rotation.set(rot[0], rot[1], rot[2]);
-    if (scl) hb.scale.set(scl[0], scl[1], scl[2]);
-    hb.userData.stimName = stimName;
-    flyBodyGroup.add(hb);
-    flyClickTargets.push(hb);
-    return hb;
-}
-
-function buildFlyBody3D() {
-    const bodyColor = 0x2a3545;
-    const darkBodyColor = 0x222d3a;
-    const eyeColor = 0x771122;
-    const legColor = 0x3a4858;
-    const wingColor = 0x6688aa;
-
-    // --- Head ---
-    const headGeom = new THREE.SphereGeometry(0.38, 20, 14);
-    addFlyMesh('head', headGeom, makeFlyMat(bodyColor),
-        [0, 0.05, 1.5], null, [1.35, 0.85, 0.95], null);
-
-    // --- Compound Eyes (large, protruding) ---
-    const eyeGeom = new THREE.SphereGeometry(0.24, 14, 10);
-    addFlyMesh('eye_l', eyeGeom, makeFlyMat(eyeColor, {shininess: 60}),
-        [-0.38, 0.12, 1.6], null, [0.85, 1.1, 0.9], 'Light (left eye)');
-    addFlyMesh('eye_r', eyeGeom, makeFlyMat(eyeColor, {shininess: 60}),
-        [0.38, 0.12, 1.6], null, [0.85, 1.1, 0.9], 'Light (right eye)');
-
-    // --- Ocelli (three small dots on top of head) ---
-    const ocellusGeom = new THREE.SphereGeometry(0.04, 8, 6);
-    const ocellusMat = makeFlyMat(0x556677, {shininess: 80});
-    addFlyMesh('ocellus_c', ocellusGeom, ocellusMat, [0, 0.3, 1.55], null, null, null);
-    addFlyMesh('ocellus_l', ocellusGeom, ocellusMat.clone(), [-0.08, 0.28, 1.6], null, null, null);
-    addFlyMesh('ocellus_r', ocellusGeom, ocellusMat.clone(), [0.08, 0.28, 1.6], null, null, null);
-
-    // --- Antennae (short, segmented, with arista) ---
-    function makeAntenna(side) {
-        const sx = side * 0.12;
-        // Funiculus (main segment)
-        const funCurve = new THREE.CatmullRomCurve3([
-            new THREE.Vector3(sx, 0.22, 1.82),
-            new THREE.Vector3(side * 0.18, 0.4, 2.0),
-            new THREE.Vector3(side * 0.15, 0.48, 2.12),
-        ]);
-        const funGeom = new THREE.TubeGeometry(funCurve, 8, 0.04, 6, false);
-        const stimName = side < 0 ? 'Tickle (left antenna)' : 'Tickle (right antenna)';
-        addFlyMesh(side < 0 ? 'ant_l' : 'ant_r', funGeom, makeFlyMat(legColor),
-            null, null, null, stimName);
-        // Arista (thin bristle)
-        const aristaCurve = new THREE.CatmullRomCurve3([
-            new THREE.Vector3(side * 0.15, 0.48, 2.12),
-            new THREE.Vector3(side * 0.3, 0.7, 2.3),
-            new THREE.Vector3(side * 0.22, 0.85, 2.5),
-        ]);
-        const aristaGeom = new THREE.TubeGeometry(aristaCurve, 8, 0.012, 4, false);
-        addFlyMesh(side < 0 ? 'arista_l' : 'arista_r', aristaGeom, makeFlyMat(legColor),
-            null, null, null, stimName);
-    }
-    makeAntenna(-1);
-    makeAntenna(1);
-
-    // --- Proboscis ---
-    const probCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0, -0.22, 1.6),
-        new THREE.Vector3(0, -0.48, 1.78),
-        new THREE.Vector3(0, -0.62, 1.72),
-    ]);
-    const probGeom = new THREE.TubeGeometry(probCurve, 8, 0.03, 6, false);
-    addFlyMesh('proboscis', probGeom, makeFlyMat(legColor), null, null, null, 'Sugar (proboscis)');
-    // Labellum (tip)
-    const labGeom = new THREE.SphereGeometry(0.05, 8, 6);
-    addFlyMesh('labellum', labGeom, makeFlyMat(legColor),
-        [0, -0.63, 1.71], null, [1, 0.6, 1], 'Sugar (proboscis)');
-
-    // --- Thorax (large, humped) ---
-    const thoraxGeom = new THREE.SphereGeometry(0.52, 20, 14);
-    addFlyMesh('thorax', thoraxGeom, makeFlyMat(bodyColor),
-        [0, 0.15, 0.55], null, [0.95, 0.9, 1.15], null);
-    // Scutellum (small bump at back of thorax)
-    const scutGeom = new THREE.SphereGeometry(0.18, 10, 8);
-    addFlyMesh('scutellum', scutGeom, makeFlyMat(bodyColor),
-        [0, 0.38, 0.2], null, [1.2, 0.6, 1.0], null);
-
-    // --- Wings ---
-    const wingShape = new THREE.Shape();
-    wingShape.moveTo(0, 0);
-    wingShape.bezierCurveTo(0.1, 0.5, 0.6, 1.1, 1.4, 1.2);
-    wingShape.bezierCurveTo(1.9, 1.15, 2.2, 0.7, 2.1, 0.3);
-    wingShape.bezierCurveTo(2.0, 0.0, 1.6, -0.2, 1.1, -0.15);
-    wingShape.bezierCurveTo(0.5, -0.1, 0.1, -0.05, 0, 0);
-    const wingGeom = new THREE.ShapeGeometry(wingShape);
-
-    // Wing veins - add subtle thickness
-    const wingMatL = makeFlyMat(wingColor, {transparent: true, opacity: 0.22, doubleSide: true, shininess: 80});
-    const wingMatR = makeFlyMat(wingColor, {transparent: true, opacity: 0.22, doubleSide: true, shininess: 80});
-
-    // Left wing (extends to -X)
-    addFlyMesh('wing_l', wingGeom, wingMatL,
-        [-0.25, 0.42, 0.65], [-0.25, -0.35, -0.08], [-1, 0.9, 0.9], null);
-    // Right wing (extends to +X)
-    addFlyMesh('wing_r', wingGeom.clone(), wingMatR,
-        [0.25, 0.42, 0.65], [-0.25, 0.35, 0.08], [1, 0.9, 0.9], null);
-
-    // --- Abdomen (tapered, segmented via lathe) ---
-    const abdProfile = [
-        new THREE.Vector2(0.01, 0),
-        new THREE.Vector2(0.2, 0.1),
-        new THREE.Vector2(0.4, 0.3),
-        new THREE.Vector2(0.52, 0.55),
-        new THREE.Vector2(0.55, 0.8),
-        new THREE.Vector2(0.52, 1.05),
-        new THREE.Vector2(0.44, 1.25),
-        new THREE.Vector2(0.32, 1.45),
-        new THREE.Vector2(0.18, 1.6),
-        new THREE.Vector2(0.08, 1.7),
-        new THREE.Vector2(0.01, 1.78),
-    ];
-    const abdGeom = new THREE.LatheGeometry(abdProfile, 18);
-    // Rotate so it extends along -Z (posterior)
-    addFlyMesh('abdomen', abdGeom, makeFlyMat(darkBodyColor),
-        [0, 0.1, -0.05], [Math.PI * 0.52, 0, 0], [1, 1, 1], null);
-
-    // Abdomen segment lines (tergite stripes)
-    for (let s = 0; s < 5; s++) {
-        const t = 0.25 + s * 0.15;
-        const segZ = -0.05 - t * 1.78;
-        const segR = 0.01 + abdProfile[Math.min(Math.floor(t * 10), 10)].x;
-        const ringGeom = new THREE.TorusGeometry(segR * 0.95, 0.008, 4, 18);
-        const ringMat = makeFlyMat(0x1a2535);
-        addFlyMesh('abd_seg_' + s, ringGeom, ringMat,
-            [0, 0.08 + s * 0.015, segZ], [Math.PI/2, 0, 0], null, null);
-    }
-
-    // --- Halteres (small knobs behind wings) ---
-    const haltGeom = new THREE.SphereGeometry(0.04, 6, 4);
-    addFlyMesh('haltere_l', haltGeom, makeFlyMat(legColor), [-0.35, 0.05, -0.05], null, null, null);
-    addFlyMesh('haltere_r', haltGeom, makeFlyMat(legColor), [0.35, 0.05, -0.05], null, null, null);
-
-    // --- Legs (3 pairs with joints) ---
-    function makeLeg(suffix, pts, stimName) {
-        const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], p[2])));
-        const geom = new THREE.TubeGeometry(curve, 12, 0.025, 5, false);
-        addFlyMesh('leg_' + suffix, geom, makeFlyMat(legColor), null, null, null, stimName);
-        // Joint spheres for detail
-        pts.slice(1, -1).forEach((p, i) => {
-            const jGeom = new THREE.SphereGeometry(0.035, 6, 4);
-            addFlyMesh('joint_' + suffix + '_' + i, jGeom, makeFlyMat(legColor), p, null, null, stimName);
-        });
-        // Wider invisible hitbox for clicking
-        const hbGeom = new THREE.TubeGeometry(curve, 8, 0.1, 4, false);
-        addFlyHitbox(null, hbGeom, null, null, null, stimName);
-    }
-
-    // Front legs (forward and down)
-    makeLeg('fl', [
-        [-0.42, -0.1, 0.95], [-0.65, -0.35, 1.15], [-0.85, -0.6, 1.3], [-0.95, -0.85, 1.45]
-    ], 'Touch (left leg/body)');
-    makeLeg('fr', [
-        [0.42, -0.1, 0.95], [0.65, -0.35, 1.15], [0.85, -0.6, 1.3], [0.95, -0.85, 1.45]
-    ], 'Touch (right leg/body)');
-
-    // Mid legs (sideways and down)
-    makeLeg('ml', [
-        [-0.48, -0.12, 0.55], [-0.75, -0.35, 0.5], [-1.05, -0.65, 0.35], [-1.2, -0.9, 0.2]
-    ], 'Touch (left leg/body)');
-    makeLeg('mr', [
-        [0.48, -0.12, 0.55], [0.75, -0.35, 0.5], [1.05, -0.65, 0.35], [1.2, -0.9, 0.2]
-    ], 'Touch (right leg/body)');
-
-    // Hind legs (backward and down)
-    makeLeg('hl', [
-        [-0.4, -0.12, 0.15], [-0.6, -0.3, -0.15], [-0.82, -0.6, -0.5], [-0.95, -0.88, -0.8]
-    ], 'Touch (left leg/body)');
-    makeLeg('hr', [
-        [0.4, -0.12, 0.15], [0.6, -0.3, -0.15], [0.82, -0.6, -0.5], [0.95, -0.88, -0.8]
-    ], 'Touch (right leg/body)');
-}
-
-function stimulateBodyPart(stimName) {
-    const amp = parseFloat(document.getElementById('stim-amp').value);
-    if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({cmd: 'stimulus_preset', name: stimName, amplitude: amp}));
-        activeStimulus = stimName;
-        document.getElementById('stim-status').textContent = `Active: ${stimName}`;
-        highlightStimulated(stimName);
-    }
-}
-
-function highlightStimulated(stimName) {
-    // Clear previous stimulus highlights
-    clearFlyStimHighlight();
-
-    const mapping = {
-        'Tickle (left antenna)': ['ant_l', 'arista_l'],
-        'Tickle (right antenna)': ['ant_r', 'arista_r'],
-        'Light (left eye)': ['eye_l'],
-        'Light (right eye)': ['eye_r'],
-        'Sugar (proboscis)': ['proboscis', 'labellum'],
-        'Sugar (left proboscis)': ['proboscis', 'labellum'],
-        'Sugar (right proboscis)': ['proboscis', 'labellum'],
-        'Touch (left leg/body)': ['leg_fl', 'leg_ml', 'leg_hl'],
-        'Touch (right leg/body)': ['leg_fr', 'leg_mr', 'leg_hr'],
-        'Odor (left antenna)': ['ant_l', 'arista_l'],
-        'Odor (right antenna)': ['ant_r', 'arista_r'],
-        'Odor (both antennae)': ['ant_l', 'arista_l', 'ant_r', 'arista_r'],
-    };
-    const names = mapping[stimName] || [];
-    names.forEach(name => {
-        const mesh = flyMeshMap[name];
-        if (!mesh || !mesh.geometry) return;
-        const edges = new THREE.EdgesGeometry(mesh.geometry);
-        const line = new THREE.LineSegments(edges,
-            new THREE.LineBasicMaterial({ color: 0x34d399, linewidth: 1 })
-        );
-        line.position.copy(mesh.position);
-        line.rotation.copy(mesh.rotation);
-        line.scale.copy(mesh.scale);
-        flyBodyGroup.add(line);
-        flyStimHighlights.push(line);
-    });
-
-    // Also highlight stim-zones in left panel
-    document.querySelectorAll('.stim-zone').forEach(z => z.classList.remove('stim-active'));
-    flyNeedsRender = true;
-    renderFly();
-}
-
-function clearFlyStimHighlight() {
-    if (!flyBodyGroup) return;
-    flyStimHighlights.forEach(line => {
-        flyBodyGroup.remove(line);
-        line.geometry.dispose();
-        line.material.dispose();
-    });
-    flyStimHighlights = [];
-}
-
-function updateFlyMotorColors(motorRates) {
-    if (!motorRates || !flyInitialized) return;
-
-    const motorToMesh = {
-        'motor_proboscis': ['proboscis', 'labellum'],
-        'motor_antenna': ['ant_l', 'ant_r', 'arista_l', 'arista_r'],
-        'motor_neck': ['head'],
-        'motor_eye': ['eye_l', 'eye_r'],
-        'descending_left': ['leg_fl', 'leg_ml', 'leg_hl', 'wing_l'],
-        'descending_right': ['leg_fr', 'leg_mr', 'leg_hr', 'wing_r'],
-    };
-
-    let changed = false;
-    for (const [group, meshNames] of Object.entries(motorToMesh)) {
-        const rate = motorRates[group] || 0;
-        const intensity = Math.min(rate / 0.08, 1.0);
-        meshNames.forEach(name => {
-            const mesh = flyMeshMap[name];
-            if (!mesh || !mesh.material || !mesh.material.emissive) return;
-            if (intensity > 0.01) {
-                mesh.material.emissive.setRGB(
-                    intensity * 0.95,
-                    intensity * 0.45,
-                    intensity * 0.05
-                );
-            } else {
-                mesh.material.emissive.setRGB(0, 0, 0);
-            }
-            changed = true;
-        });
-    }
-    if (changed) {
-        flyNeedsRender = true;
-        requestAnimationFrame(renderFly);
-    }
-}
-
+// ========================================================================
+// MOTOR GRID
+// ========================================================================
 function buildMotorGrid(info) {
-    const grid = document.getElementById('motor-grid');
+    var grid = document.getElementById('motor-grid');
     if (!info || !info.motor) return;
 
-    const motorDefs = [
-        {key: 'motor_proboscis', name: 'Proboscis', desc: 'Extension'},
-        {key: 'motor_pharynx', name: 'Pharynx', desc: 'Swallowing'},
-        {key: 'motor_antenna', name: 'Antennae', desc: 'Movement'},
-        {key: 'motor_neck', name: 'Neck', desc: 'Head turn'},
-        {key: 'motor_eye', name: 'Ocelli', desc: 'Eye adjust'},
-        {key: 'descending_left', name: 'Desc. Left', desc: 'Body L'},
-        {key: 'descending_right', name: 'Desc. Right', desc: 'Body R'},
-        {key: 'descending_center', name: 'Desc. Center', desc: 'Bilateral'},
+    var motorDefs = [
+        { key: 'motor_proboscis', name: 'Proboscis', desc: 'Extension' },
+        { key: 'motor_pharynx', name: 'Pharynx', desc: 'Swallowing' },
+        { key: 'motor_antenna', name: 'Antennae', desc: 'Movement' },
+        { key: 'motor_neck', name: 'Neck', desc: 'Head turn' },
+        { key: 'motor_eye', name: 'Ocelli', desc: 'Eye adjust' },
+        { key: 'descending_left', name: 'Desc. Left', desc: 'Body L' },
+        { key: 'descending_right', name: 'Desc. Right', desc: 'Body R' },
+        { key: 'descending_center', name: 'Desc. Center', desc: 'Bilateral' },
     ];
 
     grid.innerHTML = '';
-    motorDefs.forEach(m => {
-        const count = info.motor[m.key] || 0;
+    motorDefs.forEach(function(m) {
+        var count = info.motor[m.key] || 0;
         if (count === 0) return;
-        const card = document.createElement('div');
+        var card = document.createElement('div');
         card.className = 'motor-card';
         card.id = 'motor-card-' + m.key;
-        card.innerHTML = `
-            <div class="motor-name">${m.name}</div>
-            <div class="motor-rate" id="mr-${m.key}">0%</div>
-            <div class="motor-count">${count} neurons</div>
-            <div class="motor-bar"><div class="motor-bar-fill" id="mb-${m.key}"></div></div>
-            <div class="motor-click-hint">click for detail</div>
-        `;
-        card.addEventListener('click', () => requestMotorDetail(m.key, m.name));
+        card.innerHTML =
+            '<div class="motor-name">' + m.name + '</div>' +
+            '<div class="motor-rate" id="mr-' + m.key + '">0%</div>' +
+            '<div class="motor-count">' + count + ' neurons</div>' +
+            '<div class="motor-bar"><div class="motor-bar-fill" id="mb-' + m.key + '"></div></div>' +
+            '<div class="motor-click-hint">click for detail</div>';
+        card.addEventListener('click', (function(key, name) {
+            return function() { requestMotorDetail(key, name); };
+        })(m.key, m.name));
         grid.appendChild(card);
     });
 }
 
 function updateMotorGrid(motorRates) {
     if (!motorRates) return;
-    for (const [key, rate] of Object.entries(motorRates)) {
-        const rateEl = document.getElementById('mr-' + key);
-        const barEl = document.getElementById('mb-' + key);
-        const cardEl = document.getElementById('motor-card-' + key);
+    for (var key in motorRates) {
+        var rate = motorRates[key];
+        var rateEl = document.getElementById('mr-' + key);
+        var barEl = document.getElementById('mb-' + key);
+        var cardEl = document.getElementById('motor-card-' + key);
         if (rateEl) rateEl.textContent = (rate * 100).toFixed(1) + '%';
         if (barEl) {
-            const pct = Math.min(rate / 0.08 * 100, 100);
+            var pct = Math.min(rate / 0.08 * 100, 100);
             barEl.style.width = pct + '%';
             if (pct > 50) barEl.style.background = '#f97316';
             else if (pct > 20) barEl.style.background = '#eab308';
             else barEl.style.background = '#3b82f6';
         }
-        if (cardEl) {
-            cardEl.classList.toggle('active', rate > 0.005);
-        }
+        if (cardEl) cardEl.classList.toggle('active', rate > 0.005);
     }
 }
 
-// ---- Motor Detail Modal ----
+// ========================================================================
+// MOTOR DETAIL MODAL
+// ========================================================================
 function requestMotorDetail(groupKey, displayName) {
     if (ws && ws.readyState === 1) {
         currentMotorDetailGroup = groupKey;
         currentMotorDetailNeurons = null;
-        ws.send(JSON.stringify({cmd: 'motor_detail', group: groupKey}));
+        ws.send(JSON.stringify({ cmd: 'motor_detail', group: groupKey }));
         document.getElementById('modal-group-name').textContent = displayName + ' Neurons';
     }
 }
 
 function showMotorDetail(data) {
-    // Guard: ignore stale responses for a different group
     if (data.group !== currentMotorDetailGroup) return;
 
-    const modal = document.getElementById('motor-modal');
-    const tbody = document.getElementById('modal-neuron-tbody');
-    const subtitle = document.getElementById('modal-subtitle');
+    var modal = document.getElementById('motor-modal');
+    var tbody = document.getElementById('modal-neuron-tbody');
+    var subtitle = document.getElementById('modal-subtitle');
 
     document.getElementById('modal-group-name').textContent =
-        (data.group || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + ' Neurons';
+        (data.group || '').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); }) + ' Neurons';
 
-    const neurons = data.neurons || [];
-    // Cache for live updates (sorted by index for stable display)
-    neurons.sort((a, b) => a.index - b.index);
+    var neurons = data.neurons || [];
+    neurons.sort(function(a, b) { return a.index - b.index; });
     currentMotorDetailNeurons = neurons;
 
-    const activeCount = neurons.filter(n => n.active).length;
+    var activeCount = neurons.filter(function(n) { return n.active; }).length;
     subtitle.innerHTML =
-        `<span class="active-count">${activeCount} active</span> / ` +
-        `<span class="total-count">${neurons.length} total</span> neurons`;
+        '<span class="active-count">' + activeCount + ' active</span> / ' +
+        '<span class="total-count">' + neurons.length + ' total</span> neurons';
 
-    // Build table rows with data-index for in-place updates
     tbody.innerHTML = '';
-    neurons.forEach(n => {
-        const tr = document.createElement('tr');
+    neurons.forEach(function(n) {
+        var tr = document.createElement('tr');
         tr.dataset.neuronIndex = n.index;
         if (n.active) tr.className = 'neuron-active';
-        tr.innerHTML = `
-            <td class="status-cell">${n.active ? 'FIRING' : 'quiet'}</td>
-            <td>${n.index}</td>
-            <td>${n.root_id}</td>
-        `;
+        tr.innerHTML =
+            '<td class="status-cell">' + (n.active ? 'FIRING' : 'quiet') + '</td>' +
+            '<td>' + n.index + '</td>' +
+            '<td>' + n.root_id + '</td>';
         tbody.appendChild(tr);
     });
 
@@ -1528,30 +1934,30 @@ function showMotorDetail(data) {
 
 function updateMotorDetailLive() {
     if (!currentMotorDetailGroup || !currentMotorDetailNeurons) return;
-    const now = performance.now();
+    var now = performance.now();
     if (now - motorDetailLastUpdate < MOTOR_DETAIL_THROTTLE_MS) return;
     motorDetailLastUpdate = now;
 
-    const activeSet = new Set(lastActiveIndices);
-    const tbody = document.getElementById('modal-neuron-tbody');
-    const rows = tbody.children;
-    let activeCount = 0;
+    var activeSet = new Set(lastActiveIndices);
+    var tbody = document.getElementById('modal-neuron-tbody');
+    var rows = tbody.children;
+    var activeCount = 0;
 
-    for (let i = 0; i < currentMotorDetailNeurons.length && i < rows.length; i++) {
-        const n = currentMotorDetailNeurons[i];
-        const wasActive = n.active;
+    for (var i = 0; i < currentMotorDetailNeurons.length && i < rows.length; i++) {
+        var n = currentMotorDetailNeurons[i];
+        var wasActive = n.active;
         n.active = activeSet.has(n.index);
         if (n.active) activeCount++;
         if (n.active !== wasActive) {
-            const tr = rows[i];
+            var tr = rows[i];
             tr.className = n.active ? 'neuron-active' : '';
             tr.children[0].textContent = n.active ? 'FIRING' : 'quiet';
         }
     }
 
     document.getElementById('modal-subtitle').innerHTML =
-        `<span class="active-count">${activeCount} active</span> / ` +
-        `<span class="total-count">${currentMotorDetailNeurons.length} total</span> neurons`;
+        '<span class="active-count">' + activeCount + ' active</span> / ' +
+        '<span class="total-count">' + currentMotorDetailNeurons.length + ' total</span> neurons';
 }
 
 function closeMotorModal() {
@@ -1560,47 +1966,41 @@ function closeMotorModal() {
     currentMotorDetailNeurons = null;
 }
 
-// Close modal on overlay click
 document.getElementById('motor-modal').addEventListener('click', function(e) {
     if (e.target === this) closeMotorModal();
 });
-
-// Close modal on Escape
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') closeMotorModal();
 });
 
-// ---- WebSocket ----
+// ========================================================================
+// WEBSOCKET
+// ========================================================================
 function connect() {
     ws = new WebSocket(window.WS_BASE_URL + '/ws');
 
-    ws.onopen = () => {
+    ws.onopen = function() {
         document.getElementById('status-dot').className = 'status-dot connected';
         document.getElementById('status-text').textContent = 'Connected (paused)';
     };
 
-    ws.onclose = () => {
+    ws.onclose = function() {
         document.getElementById('status-dot').className = 'status-dot disconnected';
         document.getElementById('status-text').textContent = 'Disconnected';
         running = false;
         setTimeout(connect, 2000);
     };
 
-    ws.onmessage = (ev) => {
-        const msg = JSON.parse(ev.data);
+    ws.onmessage = function(ev) {
+        var msg = JSON.parse(ev.data);
         if (msg.type === 'metrics') {
             updateMetrics(msg);
         } else if (msg.type === 'init') {
-            if (msg.group_labels) groupLabels = msg.group_labels;
             bodyInfo = msg.body_info;
             document.getElementById('m-neurons').textContent = msg.n_neurons.toLocaleString();
             document.getElementById('m-synapses').textContent = msg.n_synapses.toLocaleString();
-            initFly3D(document.getElementById('fly-body-svg-container'), bodyInfo);
             buildMotorGrid(bodyInfo);
-            // Re-sync data toggles with server (page reload resets HTML checkboxes to checked,
-            // but server may still have toggles off from a previous session)
             sendParam('send_active_indices', document.getElementById('tog-3d').checked ? 1 : 0);
-            sendParam('send_group_rates', document.getElementById('tog-heatmap').checked ? 1 : 0);
             sendParam('send_motor_rates', document.getElementById('tog-motor').checked ? 1 : 0);
         } else if (msg.type === 'state') {
             running = msg.running;
@@ -1613,7 +2013,7 @@ function connect() {
 
 function sendCmd(cmd) {
     if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({cmd}));
+        ws.send(JSON.stringify({ cmd: cmd }));
         if (cmd === 'start') { running = true; updateRunState(); }
         if (cmd === 'pause') { running = false; updateRunState(); }
     }
@@ -1621,7 +2021,7 @@ function sendCmd(cmd) {
 
 function sendParam(key, value) {
     if (ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({cmd: 'set_param', key, value: parseFloat(value)}));
+        ws.send(JSON.stringify({ cmd: 'set_param', key: key, value: parseFloat(value) }));
     }
 }
 
@@ -1630,18 +2030,14 @@ function clearStimulus() {
     activeStimulus = null;
     document.getElementById('stim-status').textContent = '';
     clearFlyStimHighlight();
-    flyNeedsRender = true;
-    renderFly();
-    document.querySelectorAll('.stim-zone').forEach(z => z.classList.remove('stim-active'));
+    document.querySelectorAll('.stim-zone').forEach(function(z) { z.classList.remove('stim-active'); });
 }
 
-// populatePresets no longer needed — using visual body map instead
-
 function updateRunState() {
-    const dot = document.getElementById('status-dot');
-    const txt = document.getElementById('status-text');
-    const btnPlay = document.getElementById('btn-play');
-    const btnPause = document.getElementById('btn-pause');
+    var dot = document.getElementById('status-dot');
+    var txt = document.getElementById('status-text');
+    var btnPlay = document.getElementById('btn-play');
+    var btnPause = document.getElementById('btn-pause');
     if (running) {
         dot.className = 'status-dot running';
         txt.textContent = 'Running';
@@ -1655,12 +2051,9 @@ function updateRunState() {
     }
 }
 
-function updateSlider(el, spanId) {
-    const span = document.getElementById(spanId);
-    span.textContent = parseFloat(el.value).toFixed(el.step.includes('.') ? 2 : 0);
-}
-
-// ---- Metrics update ----
+// ========================================================================
+// METRICS
+// ========================================================================
 function updateMetrics(m) {
     document.getElementById('m-step').textContent = m.step.toLocaleString();
     document.getElementById('m-rate').textContent = (m.firing_rate * 100).toFixed(2) + '%';
@@ -1668,132 +2061,50 @@ function updateMetrics(m) {
     document.getElementById('m-voltage').textContent = m.mean_voltage.toFixed(3);
     document.getElementById('m-sps').textContent = Math.round(m.steps_per_sec).toLocaleString();
 
-    const realtime = m.steps_per_sec / 1000;
+    var realtime = m.steps_per_sec / 1000;
     document.getElementById('m-realtime').textContent = realtime.toFixed(1) + 'x';
 
-    spikeHistory.push(m.spike_count);
-    if (spikeHistory.length > MAX_HISTORY) spikeHistory.shift();
-
-    // Accumulate group rates history locally (no longer sent from backend)
-    if (m.group_rates) {
-        groupRatesHistory.push(m.group_rates);
-        if (groupRatesHistory.length > MAX_HISTORY) groupRatesHistory.shift();
-    }
-    updateHeatmap(groupRatesHistory);
-    updateTimeseries();
+    // Motor colors and grid
+    lastMotorRates = m.motor_rates;
     updateFlyMotorColors(m.motor_rates);
     updateMotorGrid(m.motor_rates);
     updateMotorDetailLive();
 
-    // Update 3D brain if visible
+    // Brain activity
     if (m.active_indices) {
         lastActiveIndices = m.active_indices;
-        if (currentTab === 'brain3d') {
-            updateBrainActivity(m.active_indices);
-        }
+        updateBrainActivity(m.active_indices);
     }
 }
 
-// ---- Charts ----
-const plotlyConfig = {displayModeBar: false, responsive: true};
-const darkLayout = {
-    paper_bgcolor: '#0a0e17',
-    plot_bgcolor: '#0f172a',
-    font: {color: '#94a3b8', size: 11},
-    margin: {l: 110, r: 20, t: 30, b: 40},
-};
+// ========================================================================
+// SPEED SLIDER
+// ========================================================================
+function updateSpeedSlider(el) {
+    var v = parseFloat(el.value);
+    speedMultiplier = Math.pow(10, v / 10);
+    document.getElementById('speed-val').textContent = speedMultiplier.toFixed(1) + 'x';
 
-let heatmapInitialized = false;
-let timeseriesInitialized = false;
-
-function updateHeatmap(history) {
-    if (!history || history.length === 0) return;
-
-    const numGroups = history[0].length;
-    const z = [];
-    for (let g = 0; g < numGroups; g++) {
-        const row = [];
-        for (let t = 0; t < history.length; t++) {
-            row.push(history[t][g] * 100);
-        }
-        z.push(row);
-    }
-
-    const yLabels = groupLabels.length === numGroups
-        ? groupLabels
-        : Array.from({length: numGroups}, (_, g) => 'G' + g);
-
-    if (!heatmapInitialized) {
-        Plotly.newPlot('heatmap', [{
-            z: z,
-            y: yLabels,
-            type: 'heatmap',
-            colorscale: [
-                [0, '#0f172a'],
-                [0.2, '#1e3a5f'],
-                [0.4, '#2563eb'],
-                [0.6, '#7c3aed'],
-                [0.8, '#ec4899'],
-                [1.0, '#f97316']
-            ],
-            colorbar: {title: 'Rate %', titleside: 'right', thickness: 12, len: 0.9},
-            zmin: 0,
-            zmax: 10,
-            hoverongaps: false,
-        }], {
-            ...darkLayout,
-            title: {text: 'Firing Rate by Brain Region', font: {size: 13, color: '#60a5fa'}},
-            xaxis: {title: 'Batch'},
-            yaxis: {title: '', automargin: true},
-        }, plotlyConfig);
-        heatmapInitialized = true;
-    } else {
-        Plotly.restyle('heatmap', {z: [z], y: [yLabels]}, [0]);
-    }
+    // Update simulation batch_size
+    var newBatch = Math.max(1, Math.min(500, Math.round(BASE_BATCH * speedMultiplier)));
+    sendParam('batch_size', newBatch);
 }
 
-function updateTimeseries() {
-    if (!timeseriesInitialized) {
-        Plotly.newPlot('timeseries', [{
-            y: spikeHistory,
-            type: 'scatter',
-            mode: 'lines',
-            line: {color: '#34d399', width: 1.5},
-            fill: 'tozeroy',
-            fillcolor: 'rgba(52, 211, 153, 0.1)',
-        }], {
-            ...darkLayout,
-            title: {text: 'Total Spikes per Batch', font: {size: 13, color: '#60a5fa'}},
-            xaxis: {title: 'Batch'},
-            yaxis: {title: 'Spikes'},
-            margin: {l: 60, r: 20, t: 30, b: 40},
-        }, plotlyConfig);
-        timeseriesInitialized = true;
-    } else {
-        Plotly.restyle('timeseries', {y: [spikeHistory]}, [0]);
-    }
+function updateSlider(el, spanId) {
+    var span = document.getElementById(spanId);
+    span.textContent = parseFloat(el.value).toFixed(el.step.includes('.') ? 2 : 0);
 }
 
-// Init
-window.addEventListener('load', () => {
+// ========================================================================
+// INIT
+// ========================================================================
+window.addEventListener('load', function() {
     buildStimulusMap();
-    updateHeatmap([[0]]);
-    spikeHistory.push(0);
-    updateTimeseries();
-    spikeHistory.length = 0;
-    heatmapInitialized = false;
-    timeseriesInitialized = false;
+    initScene();
     connect();
 });
 
-window.addEventListener('resize', () => {
-    if (currentTab === 'charts') {
-        Plotly.Plots.resize('heatmap');
-        Plotly.Plots.resize('timeseries');
-    } else {
-        onBrainResize();
-    }
-});
+window.addEventListener('resize', onResize);
 </script>
 </body>
 </html>
