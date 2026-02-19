@@ -508,8 +508,26 @@ input[type="range"] {
         <h2>Environment</h2>
         <div class="btn-group">
             <button class="env-food" id="btn-add-food" onclick="togglePlacement('food')">+ Food</button>
+            <button class="env-food" id="btn-add-aversive" onclick="togglePlacement('aversive_food')" style="background:#4a1040;border-color:#a855f7;">+ Aversive</button>
             <button class="env-obstacle" id="btn-add-obstacle" onclick="togglePlacement('obstacle')">+ Obstacle</button>
             <button class="clear" onclick="clearEnvironment()" style="font-size:12px;">Clear All</button>
+        </div>
+        <div id="scent-display" style="margin-bottom:4px;">
+            <div style="font-size:9px;color:#94a3b8;display:flex;gap:8px;">
+                <div style="flex:1;">
+                    <span>Scent L</span>
+                    <div style="height:3px;background:#0f172a;border-radius:2px;overflow:hidden;margin-top:2px;">
+                        <div id="scent-left-bar" style="height:100%;width:0%;background:#eab308;border-radius:2px;transition:width 0.2s;"></div>
+                    </div>
+                </div>
+                <div style="flex:1;">
+                    <span>Scent R</span>
+                    <div style="height:3px;background:#0f172a;border-radius:2px;overflow:hidden;margin-top:2px;">
+                        <div id="scent-right-bar" style="height:100%;width:0%;background:#eab308;border-radius:2px;transition:width 0.2s;"></div>
+                    </div>
+                </div>
+            </div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px;" id="collision-state"></div>
         </div>
         <p id="env-status" style="font-size:10px; color:#475569;"></p>
 
@@ -564,6 +582,89 @@ input[type="range"] {
             <span class="metric-value" id="m-flyheading" style="font-size:14px;">0&deg;</span>
         </div></div>
 
+        <label>Fly Opacity</label>
+        <div class="slider-row">
+            <input type="range" id="fly-opacity" min="0.05" max="1.0" value="0.35" step="0.05"
+                   oninput="setFlyOpacity(parseFloat(this.value)); document.getElementById('fly-opacity-val').textContent = parseFloat(this.value).toFixed(2);">
+            <span class="slider-val" id="fly-opacity-val">0.35</span>
+        </div>
+
+        <h2>Command Neurons</h2>
+        <div id="command-display" style="margin-bottom:8px;">
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>P9 L</span><span id="cmd-P9_L-val" style="color:#34d399;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-P9_L-bar" style="height:100%;width:0%;background:#34d399;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>P9 R</span><span id="cmd-P9_R-val" style="color:#34d399;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-P9_R-bar" style="height:100%;width:0%;background:#34d399;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>DNa02 L</span><span id="cmd-DNa02_L-val" style="color:#60a5fa;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-DNa02_L-bar" style="height:100%;width:0%;background:#60a5fa;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>DNa02 R</span><span id="cmd-DNa02_R-val" style="color:#60a5fa;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-DNa02_R-bar" style="height:100%;width:0%;background:#60a5fa;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>oDN1 L</span><span id="cmd-oDN1_L-val" style="color:#f97316;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-oDN1_L-bar" style="height:100%;width:0%;background:#f97316;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>oDN1 R</span><span id="cmd-oDN1_R-val" style="color:#f97316;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-oDN1_R-bar" style="height:100%;width:0%;background:#f97316;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>aDN1 L</span><span id="cmd-aDN1_L-val" style="color:#a78bfa;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-aDN1_L-bar" style="height:100%;width:0%;background:#a78bfa;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>aDN1 R</span><span id="cmd-aDN1_R-val" style="color:#a78bfa;">0</span>
+                    </div>
+                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
+                        <div id="cmd-aDN1_R-bar" style="height:100%;width:0%;background:#a78bfa;border-radius:2px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <h2>Motor Output</h2>
         <p style="font-size:10px; color:#475569; margin-bottom:4px;">Click cards to see active neurons</p>
         <div class="motor-grid" id="motor-grid"></div>
@@ -613,6 +714,7 @@ let bodyInfo = null;
 let activeStimulus = null;
 let lastActiveIndices = [];
 let lastMotorRates = null;
+let lastCommandRates = null;
 
 // Motor detail modal
 let currentMotorDetailGroup = null;
@@ -638,8 +740,8 @@ let brainBaseColors = null;
 let brainGlowColors = null;
 let brainClassLabels = null;
 let brainN = 0;
-const MAX_GLOW = 5000;
-const GLOW_COLOR = [0.2, 0.85, 1.0];
+const MAX_GLOW = 8000;
+const GLOW_COLOR = [0.4, 1.0, 1.0];
 const DIM_ALPHA = 0.5;
 
 const CLASS_COLORS = [
@@ -663,6 +765,13 @@ let gaitPhase = 0;
 let speedMultiplier = 1.0;
 const BASE_BATCH = 50;
 
+// Command neuron movement tuning constants
+const SPEED_SCALE = 300;    // P9 rate -> fly speed
+const TURN_SCALE = 50;      // DNa02 differential -> angular velocity
+const STOP_SCALE = 400;     // oDN1 rate -> speed reduction
+const GROOM_SCALE = 400;    // aDN1 rate -> speed reduction (grooming stops)
+let isGrooming = false;
+
 // Leg animation
 let legAnimA = []; // FL, MR, HL
 let legAnimB = []; // FR, ML, HR
@@ -670,6 +779,21 @@ let legAnimB = []; // FR, ML, HR
 // Environment objects
 let envObjects = [];
 let placementMode = null;
+
+// Scent particle system
+let scentParticles = null;      // THREE.Points
+let scentData = [];             // per-particle: {x,z, vx,vz, age, maxAge, foodIdx, type}
+const MAX_SCENT_PARTICLES = 4000;
+const SCENT_SPAWN_RATE = 3;     // particles per food per frame
+const SCENT_LIFETIME = 8.0;     // seconds
+const SCENT_DIFFUSION = 0.3;    // Brownian motion scale
+const SCENT_DRIFT = 0.05;       // outward drift speed
+
+// Scent/collision cooldown
+let lastScentSendTime = 0;
+const SCENT_SEND_INTERVAL = 100; // ms between scent WebSocket messages
+let lastCollisionSendTime = 0;
+const COLLISION_SEND_INTERVAL = 200; // ms between collision messages
 
 // Animation
 let lastFrameTime = 0;
@@ -834,16 +958,18 @@ function initScene() {
     buildZenGarden();
     buildFlyEntity();
     loadBrain();
+    initScentParticles();
 
-    // Click handler
+    // Click handlers
     renderer.domElement.addEventListener('click', onSceneClick);
+    renderer.domElement.addEventListener('contextmenu', onSceneRightClick);
     renderer.domElement.addEventListener('dblclick', resetCamera);
 
     // Resize
     new ResizeObserver(onResize).observe(container);
 
     document.getElementById('scene-info').innerHTML =
-        'Drag to rotate | Scroll to zoom | Double-click to reset camera';
+        'Drag to rotate | Scroll to zoom | Double-click to reset camera | Right-click to remove objects';
 
     startAnimation();
 }
@@ -1076,6 +1202,9 @@ function loadFlyModel() {
             var hasVertexColors = child.geometry && child.geometry.attributes &&
                                   child.geometry.attributes.color;
 
+            // Only disable depthWrite for very transparent parts (wings, membranes)
+            var isVeryTransparent = (opacity < 0.25);
+
             // Replace material with transparent Phong
             child.material = new THREE.MeshPhongMaterial({
                 vertexColors: hasVertexColors,
@@ -1085,9 +1214,10 @@ function loadFlyModel() {
                 transparent: true,
                 opacity: opacity,
                 side: THREE.DoubleSide,
-                depthWrite: false,
+                depthWrite: !isVeryTransparent,
                 flatShading: false,
             });
+            child.renderOrder = isVeryTransparent ? 1 : 0;
             child.castShadow = true;
 
             // Store in mesh map
@@ -1141,13 +1271,20 @@ function computeHeadBounds() {
         }
     }
     if (found) {
+        // Convert world-space bounds to flyEntity local space
+        // (brainGroup.position is set in flyEntity local space)
+        var invMatrix = new THREE.Matrix4().copy(flyEntity.matrixWorld).invert();
+        box.applyMatrix4(invMatrix);
+
         flyHeadCenter = new THREE.Vector3();
         box.getCenter(flyHeadCenter);
         flyHeadSize = new THREE.Vector3();
         box.getSize(flyHeadSize);
+        console.log('Head bounds (local): center=', flyHeadCenter, 'size=', flyHeadSize);
     } else {
-        flyHeadCenter = new THREE.Vector3(0, -0.2, 0.65);
+        flyHeadCenter = new THREE.Vector3(0, 0.1, 0.6);
         flyHeadSize = new THREE.Vector3(0.8, 0.5, 0.5);
+        console.log('Head bounds (fallback): center=', flyHeadCenter, 'size=', flyHeadSize);
     }
 }
 
@@ -1177,6 +1314,19 @@ function repositionBrainInHead() {
         flyHeadCenter.y - bCenter[1] * sY,
         flyHeadCenter.z - bCenter[2] * sZ
     );
+    console.log('Brain repositioned: scale=', sX.toFixed(4), sY.toFixed(4), sZ.toFixed(4),
+                'pos=', brainGroup.position.x.toFixed(4), brainGroup.position.y.toFixed(4), brainGroup.position.z.toFixed(4));
+}
+
+function setFlyOpacity(opacity) {
+    var isVeryTransparent = (opacity < 0.25);
+    for (var key in flyMeshMap) {
+        var mesh = flyMeshMap[key];
+        if (!mesh || !mesh.material) continue;
+        mesh.material.opacity = opacity;
+        mesh.material.depthWrite = !isVeryTransparent;
+        mesh.renderOrder = isVeryTransparent ? 1 : 0;
+    }
 }
 
 function setupLegAnimation() {
@@ -1232,12 +1382,11 @@ function loadBrain() {
                 var rangeX = (mxX - mnX) / 2 || 1;
                 var rangeY = (mxY - mnY) / 2 || 1;
                 var rangeZ = (mxZ - mnZ) / 2 || 1;
-                var uniformScale = Math.max(rangeX, rangeY, rangeZ);
-                var Z_STRETCH = 10.0;
+                // Normalize each axis independently to [-1, 1] (preserve natural brain proportions)
                 for (var i = 0; i < brainPositions.length; i += 3) {
-                    brainPositions[i] = -((brainPositions[i] - cX) / uniformScale);
-                    brainPositions[i + 1] = (brainPositions[i + 1] - cY) / uniformScale;
-                    brainPositions[i + 2] = (brainPositions[i + 2] - cZ) / uniformScale * Z_STRETCH;
+                    brainPositions[i] = -((brainPositions[i] - cX) / rangeX);
+                    brainPositions[i + 1] = (brainPositions[i + 1] - cY) / rangeY;
+                    brainPositions[i + 2] = (brainPositions[i + 2] - cZ) / rangeZ;
                 }
             } else {
                 brainPositions = new Float32Array(brainN * 3);
@@ -1246,6 +1395,12 @@ function loadBrain() {
 
             // Position brain inside head (dynamic — uses GLB head bounds if loaded)
             repositionBrainInHead();
+
+            // Compute scale-adjusted point sizes so points remain visible after brainGroup.scale
+            var avgScale = (brainGroup.scale.x + brainGroup.scale.y + brainGroup.scale.z) / 3;
+            if (avgScale < 0.001) avgScale = 1;
+            var basePtSize = 0.012 / avgScale;
+            var glowPtSize = 0.035 / avgScale;
 
             // Class colors
             brainBaseColors = new Float32Array(brainN * 3);
@@ -1272,7 +1427,7 @@ function loadBrain() {
             baseGeom.setAttribute('position', new THREE.BufferAttribute(brainPositions, 3));
             baseGeom.setAttribute('color', new THREE.BufferAttribute(brainBaseColors, 3));
             var baseMat = new THREE.PointsMaterial({
-                size: 0.007,
+                size: basePtSize,
                 vertexColors: true,
                 transparent: false,
                 depthWrite: true,
@@ -1290,7 +1445,7 @@ function loadBrain() {
             glowGeom.setAttribute('color', new THREE.BufferAttribute(brainGlowColors, 3));
             glowGeom.setDrawRange(0, 0);
             var glowMat = new THREE.PointsMaterial({
-                size: 0.022,
+                size: glowPtSize,
                 vertexColors: true,
                 transparent: true,
                 opacity: 0.6,
@@ -1357,28 +1512,46 @@ function buildBrainLegend(labels) {
 // FLY MOVEMENT
 // ========================================================================
 function updateFlyMovement(dt) {
-    if (!lastMotorRates || !flyEntity) return;
+    if (!flyEntity) return;
 
-    var left = lastMotorRates.descending_left || 0;
-    var right = lastMotorRates.descending_right || 0;
+    // Use command neuron rates if available, else fall back to motor rates
+    if (lastCommandRates) {
+        var P9_L = lastCommandRates.P9_L || 0;
+        var P9_R = lastCommandRates.P9_R || 0;
+        var DNa02_L = lastCommandRates.DNa02_L || 0;
+        var DNa02_R = lastCommandRates.DNa02_R || 0;
+        var oDN1_L = lastCommandRates.oDN1_L || 0;
+        var oDN1_R = lastCommandRates.oDN1_R || 0;
+        var aDN1_L = lastCommandRates.aDN1_L || 0;
+        var aDN1_R = lastCommandRates.aDN1_R || 0;
 
-    var forwardRate = (left + right) / 2;
-    var turnRate = (left - right);
+        var speed = (P9_L + P9_R) / 2 * SPEED_SCALE;
+        // DNa02 left fires -> turn right (positive flyAngle)
+        var turn = (DNa02_L - DNa02_R) * TURN_SCALE;
+        var stop = (oDN1_L + oDN1_R) / 2 * STOP_SCALE;
+        var groom = (aDN1_L + aDN1_R) / 2 * GROOM_SCALE;
+        isGrooming = groom > 0.5;
 
-    // Only move when motor neurons fire
-    if (forwardRate < 0.001 && Math.abs(turnRate) < 0.001) {
+        var effectiveSpeed = Math.max(0, speed - stop - groom);
+        flyAngle += turn * dt;
+        flySpeed = effectiveSpeed * speedMultiplier;
+    } else if (lastMotorRates) {
+        // Fallback: use aggregate descending rates
+        var left = lastMotorRates.descending_left || 0;
+        var right = lastMotorRates.descending_right || 0;
+        var forwardRate = (left + right) / 2;
+        var turnRate = (left - right);
+        flySpeed = forwardRate * 80 * speedMultiplier;
+        flyAngle += turnRate * 30 * dt;
+    } else {
         flySpeed = 0;
         return;
     }
 
-    var moveScale = 80 * speedMultiplier;
-    var turnScale = 30;
-
-    flySpeed = forwardRate * moveScale;
-    flyAngle += turnRate * turnScale * dt;
-
-    flyPos.x += Math.sin(flyAngle) * flySpeed * dt;
-    flyPos.z += Math.cos(flyAngle) * flySpeed * dt;
+    if (flySpeed > 0.001) {
+        flyPos.x += Math.sin(flyAngle) * flySpeed * dt;
+        flyPos.z += Math.cos(flyAngle) * flySpeed * dt;
+    }
 
     // Clamp to garden bounds
     var bound = GARDEN_SIZE - 0.5;
@@ -1427,12 +1600,15 @@ function togglePlacement(mode) {
         placementMode = null;
         indicator.style.display = 'none';
         document.getElementById('btn-add-food').classList.remove('active');
+        document.getElementById('btn-add-aversive').classList.remove('active');
         document.getElementById('btn-add-obstacle').classList.remove('active');
     } else {
         placementMode = mode;
         indicator.style.display = 'block';
-        indicator.textContent = mode === 'food' ? 'Click ground to place food' : 'Click ground to place obstacle';
+        var labels = { food: 'Click ground to place food', aversive_food: 'Click ground to place aversive food', obstacle: 'Click ground to place obstacle' };
+        indicator.textContent = labels[mode] || 'Click ground to place';
         document.getElementById('btn-add-food').classList.toggle('active', mode === 'food');
+        document.getElementById('btn-add-aversive').classList.toggle('active', mode === 'aversive_food');
         document.getElementById('btn-add-obstacle').classList.toggle('active', mode === 'obstacle');
     }
 }
@@ -1450,6 +1626,21 @@ function addFood(pos) {
     mesh.castShadow = true;
     scene.add(mesh);
     envObjects.push({ mesh: mesh, type: 'food', radius: 0.25, x: pos.x, z: pos.z });
+    updateEnvStatus();
+}
+
+function addAversiveFood(pos) {
+    var geom = new THREE.SphereGeometry(0.22, 10, 8);
+    var mat = new THREE.MeshPhongMaterial({
+        color: 0x8833aa,
+        shininess: 30,
+        emissive: 0x1a0025,
+    });
+    var mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(pos.x, GROUND_Y + 0.18, pos.z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    envObjects.push({ mesh: mesh, type: 'aversive_food', radius: 0.22, x: pos.x, z: pos.z });
     updateEnvStatus();
 }
 
@@ -1478,14 +1669,16 @@ function clearEnvironment() {
         if (obj.mesh.material) obj.mesh.material.dispose();
     });
     envObjects = [];
+    scentData = [];  // Clear scent particles too
     updateEnvStatus();
 }
 
 function updateEnvStatus() {
     var food = envObjects.filter(function(o) { return o.type === 'food'; }).length;
+    var aversive = envObjects.filter(function(o) { return o.type === 'aversive_food'; }).length;
     var obs = envObjects.filter(function(o) { return o.type === 'obstacle'; }).length;
     document.getElementById('env-status').textContent =
-        food + ' food, ' + obs + ' obstacles placed';
+        food + ' food, ' + aversive + ' aversive, ' + obs + ' obstacles';
 }
 
 function updateEnvironment(dt) {
@@ -1500,22 +1693,10 @@ function updateEnvironment(dt) {
         var dist = Math.sqrt(dx * dx + dz * dz);
 
         if (obj.type === 'food') {
-            // Attract fly heading toward food when within range
-            if (dist < attractRange && dist > contactRange && flySpeed > 0.01) {
-                var angleToFood = Math.atan2(dx, dz);
-                var angleDiff = angleToFood - flyAngle;
-                // Normalize to [-PI, PI]
-                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-                flyAngle += angleDiff * 1.5 * dt;
-                flyEntity.rotation.y = flyAngle;
-            }
-
-            // Eat food on contact
+            // Eat food on contact — trigger gustatory stimulus via connectome
             if (dist < contactRange) {
-                // Trigger gustatory stimulus
                 if (ws && ws.readyState === 1) {
-                    ws.send(JSON.stringify({ cmd: 'stimulus_preset', name: 'Sugar (proboscis)', amplitude: 1.0 }));
+                    ws.send(JSON.stringify({ cmd: 'env_gustatory', intensity: 1.0 }));
                 }
                 scene.remove(obj.mesh);
                 obj.mesh.geometry.dispose();
@@ -1524,17 +1705,223 @@ function updateEnvironment(dt) {
                 updateEnvStatus();
             }
         } else if (obj.type === 'obstacle') {
-            // Push fly out on collision
+            // Push fly out on collision (soft physical push)
             if (dist < obstacleRange && dist > 0.01) {
                 var pushX = -dx / dist;
                 var pushZ = -dz / dist;
                 var overlap = obstacleRange - dist;
-                flyPos.x += pushX * overlap * 1.1;
-                flyPos.z += pushZ * overlap * 1.1;
+                flyPos.x += pushX * overlap * 0.6;
+                flyPos.z += pushZ * overlap * 0.6;
                 flyEntity.position.x = flyPos.x;
                 flyEntity.position.z = flyPos.z;
+
+                // Determine which side was hit
+                var obstacleAngle = Math.atan2(dx, dz);
+                var relAngle = obstacleAngle - flyAngle;
+                while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+                while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+                var hitLeft = relAngle < 0;
+                var hitRight = relAngle >= 0;
+                var intensity = Math.min(overlap / obstacleRange, 1.0);
+
+                // Send mechanosensory stimulus via connectome (with cooldown)
+                var now = performance.now();
+                if (ws && ws.readyState === 1 && now - lastCollisionSendTime > COLLISION_SEND_INTERVAL) {
+                    lastCollisionSendTime = now;
+                    ws.send(JSON.stringify({
+                        cmd: 'env_collision',
+                        hit_left: hitLeft,
+                        hit_right: hitRight,
+                        intensity: intensity,
+                    }));
+
+                    // Visual: flash hit-side legs white briefly
+                    flashLegsOnCollision(hitLeft, hitRight);
+
+                    // Update collision state display
+                    var stateEl = document.getElementById('collision-state');
+                    if (stateEl) stateEl.textContent = 'Collision: ' + (hitLeft ? 'L' : '') + (hitRight ? 'R' : '');
+                    setTimeout(function() { if (stateEl) stateEl.textContent = ''; }, 500);
+                }
             }
         }
+    }
+}
+
+// ========================================================================
+// SCENT PARTICLE SYSTEM
+// ========================================================================
+function initScentParticles() {
+    var positions = new Float32Array(MAX_SCENT_PARTICLES * 3);
+    var colors = new Float32Array(MAX_SCENT_PARTICLES * 3);
+    var sizes = new Float32Array(MAX_SCENT_PARTICLES);
+
+    var geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geom.setDrawRange(0, 0);
+
+    var mat = new THREE.PointsMaterial({
+        size: 0.15,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true,
+    });
+
+    scentParticles = new THREE.Points(geom, mat);
+    scentParticles.renderOrder = 2;
+    scene.add(scentParticles);
+    scentData = [];
+}
+
+function updateScentParticles(dt) {
+    if (!scentParticles) return;
+
+    // Spawn new particles from food sources
+    var foods = envObjects.filter(function(o) { return o.type === 'food' || o.type === 'aversive_food'; });
+    foods.forEach(function(food, foodIdx) {
+        for (var s = 0; s < SCENT_SPAWN_RATE && scentData.length < MAX_SCENT_PARTICLES; s++) {
+            var angle = Math.random() * Math.PI * 2;
+            var speed = 0.1 + Math.random() * 0.2;
+            scentData.push({
+                x: food.x + (Math.random() - 0.5) * 0.3,
+                z: food.z + (Math.random() - 0.5) * 0.3,
+                vx: Math.cos(angle) * speed,
+                vz: Math.sin(angle) * speed,
+                age: 0,
+                maxAge: SCENT_LIFETIME * (0.6 + Math.random() * 0.8),
+                foodIdx: foodIdx,
+                type: food.type === 'aversive_food' ? 'aversive' : 'attractive',
+            });
+        }
+    });
+
+    // Update existing particles
+    var posArr = scentParticles.geometry.attributes.position.array;
+    var colArr = scentParticles.geometry.attributes.color.array;
+    var alive = 0;
+
+    for (var i = scentData.length - 1; i >= 0; i--) {
+        var p = scentData[i];
+        p.age += dt;
+        if (p.age >= p.maxAge) {
+            scentData.splice(i, 1);
+            continue;
+        }
+
+        // Brownian motion + drift
+        p.vx += (Math.random() - 0.5) * SCENT_DIFFUSION * dt;
+        p.vz += (Math.random() - 0.5) * SCENT_DIFFUSION * dt;
+        p.x += p.vx * dt;
+        p.z += p.vz * dt;
+    }
+
+    // Write to buffers
+    for (var i = 0; i < scentData.length; i++) {
+        var p = scentData[i];
+        var fade = 1.0 - (p.age / p.maxAge);
+
+        posArr[i * 3] = p.x;
+        posArr[i * 3 + 1] = GROUND_Y + 0.15 + Math.sin(p.age * 2) * 0.1;
+        posArr[i * 3 + 2] = p.z;
+
+        if (p.type === 'aversive') {
+            colArr[i * 3] = 0.8 * fade;
+            colArr[i * 3 + 1] = 0.1 * fade;
+            colArr[i * 3 + 2] = 0.6 * fade;
+        } else {
+            colArr[i * 3] = 0.9 * fade;
+            colArr[i * 3 + 1] = 0.8 * fade;
+            colArr[i * 3 + 2] = 0.2 * fade;
+        }
+    }
+
+    scentParticles.geometry.setDrawRange(0, scentData.length);
+    scentParticles.geometry.attributes.position.needsUpdate = true;
+    scentParticles.geometry.attributes.color.needsUpdate = true;
+}
+
+function getAntennaWorldPos(side) {
+    // Try to get antenna mesh position from flyMeshMap
+    var antennaKey = null;
+    for (var key in flyMeshMap) {
+        if (key.startsWith('antenna_' + side)) {
+            antennaKey = key;
+            break;
+        }
+    }
+
+    var offset = side === 'left' ? -0.15 : 0.15;
+    var localPos = new THREE.Vector3(offset, 0.1, 0.6); // rough antenna position
+
+    if (antennaKey && flyMeshMap[antennaKey]) {
+        var mesh = flyMeshMap[antennaKey];
+        var box = new THREE.Box3().setFromObject(mesh);
+        box.getCenter(localPos);
+    }
+
+    if (flyEntity) {
+        return flyEntity.localToWorld(localPos.clone());
+    }
+    return localPos;
+}
+
+function computeScentConcentration(worldPos) {
+    // Sum Gaussian falloffs from all food sources
+    var attractive = 0;
+    var aversive = 0;
+    var sigma = 3.0; // scent spread radius
+
+    envObjects.forEach(function(obj) {
+        if (obj.type !== 'food' && obj.type !== 'aversive_food') return;
+        var dx = worldPos.x - obj.x;
+        var dz = worldPos.z - obj.z;
+        var distSq = dx * dx + dz * dz;
+        var conc = Math.exp(-distSq / (2 * sigma * sigma));
+
+        if (obj.type === 'aversive_food') {
+            aversive += conc;
+        } else {
+            attractive += conc;
+        }
+    });
+
+    return { attractive: Math.min(attractive, 1.0), aversive: Math.min(aversive, 1.0) };
+}
+
+function sendScentStimulus() {
+    if (!ws || ws.readyState !== 1) return;
+    var now = performance.now();
+    if (now - lastScentSendTime < SCENT_SEND_INTERVAL) return;
+    lastScentSendTime = now;
+
+    var leftPos = getAntennaWorldPos('left');
+    var rightPos = getAntennaWorldPos('right');
+
+    var leftConc = computeScentConcentration(leftPos);
+    var rightConc = computeScentConcentration(rightPos);
+
+    // Send attractive scent
+    if (leftConc.attractive > 0.01 || rightConc.attractive > 0.01) {
+        ws.send(JSON.stringify({
+            cmd: 'env_stimulus',
+            scent_left: leftConc.attractive,
+            scent_right: rightConc.attractive,
+            scent_type: 'attractive',
+        }));
+    }
+
+    // Send aversive scent
+    if (leftConc.aversive > 0.01 || rightConc.aversive > 0.01) {
+        ws.send(JSON.stringify({
+            cmd: 'env_stimulus',
+            scent_left: leftConc.aversive,
+            scent_right: rightConc.aversive,
+            scent_type: 'aversive',
+        }));
     }
 }
 
@@ -1570,6 +1957,9 @@ function animate(time) {
     updateFlyMovement(dt);
     animateLegs(dt);
     updateEnvironment(dt);
+    updateScentParticles(dt);
+    sendScentStimulus();
+    updateFlyVisualFeedback(dt);
     updateCamera(dt);
 
     if (controls) controls.update();
@@ -1611,10 +2001,12 @@ function onSceneClick(event) {
             var pt = groundHits[0].point;
             if (placementMode === 'food') {
                 addFood({ x: pt.x, z: pt.z });
+            } else if (placementMode === 'aversive_food') {
+                addAversiveFood({ x: pt.x, z: pt.z });
             } else {
                 addObstacle({ x: pt.x, z: pt.z });
             }
-            togglePlacement(placementMode); // exit placement mode
+            // Stay in placement mode — click button again or press Esc to exit
             return;
         }
     }
@@ -1624,6 +2016,69 @@ function onSceneClick(event) {
     if (hits.length > 0) {
         var stimName = hits[0].object.userData.stimName;
         if (stimName) stimulateBodyPart(stimName);
+    }
+}
+
+function onSceneRightClick(event) {
+    event.preventDefault();
+
+    // If in placement mode, exit it
+    if (placementMode) {
+        togglePlacement(placementMode);
+        return;
+    }
+
+    // Otherwise, remove nearest environment object under cursor
+    var rect = renderer.domElement.getBoundingClientRect();
+    var mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    var raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, camera);
+
+    // Check env object meshes
+    var envMeshes = envObjects.map(function(o) { return o.mesh; });
+    var hits = raycaster.intersectObjects(envMeshes, false);
+    if (hits.length > 0) {
+        var hitMesh = hits[0].object;
+        var idx = envObjects.findIndex(function(o) { return o.mesh === hitMesh; });
+        if (idx !== -1) {
+            var obj = envObjects[idx];
+            scene.remove(obj.mesh);
+            if (obj.mesh.geometry) obj.mesh.geometry.dispose();
+            if (obj.mesh.material) obj.mesh.material.dispose();
+            envObjects.splice(idx, 1);
+            updateEnvStatus();
+        }
+        return;
+    }
+
+    // Also try clicking near ground to remove closest object within 1 unit
+    if (groundMesh) {
+        var groundHits = raycaster.intersectObject(groundMesh);
+        if (groundHits.length > 0) {
+            var pt = groundHits[0].point;
+            var closest = -1;
+            var closestDist = 1.0;
+            for (var i = 0; i < envObjects.length; i++) {
+                var dx = envObjects[i].x - pt.x;
+                var dz = envObjects[i].z - pt.z;
+                var d = Math.sqrt(dx * dx + dz * dz);
+                if (d < closestDist) {
+                    closestDist = d;
+                    closest = i;
+                }
+            }
+            if (closest !== -1) {
+                var obj = envObjects[closest];
+                scene.remove(obj.mesh);
+                if (obj.mesh.geometry) obj.mesh.geometry.dispose();
+                if (obj.mesh.material) obj.mesh.material.dispose();
+                envObjects.splice(closest, 1);
+                updateEnvStatus();
+            }
+        }
     }
 }
 
@@ -1700,10 +2155,23 @@ function clearFlyStimHighlight() {
     flyStimHighlights = [];
 }
 
-function updateFlyMotorColors(motorRates) {
-    if (!motorRates) return;
+// Collision flash state — tracked here so the unified pass can blend it
+var collisionFlashLeft = 0;   // 0..1, decays each frame
+var collisionFlashRight = 0;
 
-    // Motor group → body name matching functions
+function updateFlyMotorColors(motorRates) {
+    // intentionally empty — replaced by unified updateFlyVisualFeedback
+}
+
+// ========================================================================
+// UNIFIED VISUAL FEEDBACK (single pass — no blinking)
+// ========================================================================
+function updateFlyVisualFeedback(dt) {
+    if (!flyMeshMap) return;
+
+    // ---- Gather all emissive sources ----
+
+    // 1. Motor rates → orange glow
     var motorPatterns = {
         'motor_proboscis': function(bn) { return bn === 'rostrum' || bn === 'haustellum' || bn.indexOf('labrum') === 0; },
         'motor_antenna': function(bn) { return bn.indexOf('antenna') === 0; },
@@ -1718,31 +2186,128 @@ function updateFlyMotorColors(motorRates) {
                    bn === 'wing_right' || bn === 'haltere_right';
         },
     };
-
-    for (var group in motorPatterns) {
-        var rate = motorRates[group] || 0;
-        var intensity = Math.min(rate / 0.08, 1.0);
-        var matchFn = motorPatterns[group];
-
-        for (var key in flyMeshMap) {
-            var parts = key.split('__');
-            var bodyName = parts[0];
-            var meshName = parts[1] || '';
-            if (!matchFn(bodyName, meshName)) continue;
-
-            var mesh = flyMeshMap[key];
-            if (!mesh || !mesh.material || !mesh.material.emissive) continue;
-            if (intensity > 0.01) {
-                mesh.material.emissive.setRGB(
-                    intensity * 0.95,
-                    intensity * 0.45,
-                    intensity * 0.05
-                );
-            } else {
-                mesh.material.emissive.setRGB(0, 0, 0);
+    // Pre-compute motor intensities per mesh key
+    var motorIntensity = {};
+    if (lastMotorRates) {
+        for (var group in motorPatterns) {
+            var rate = lastMotorRates[group] || 0;
+            var intensity = Math.min(rate / 0.08, 1.0);
+            if (intensity < 0.01) continue;
+            var matchFn = motorPatterns[group];
+            for (var key in flyMeshMap) {
+                var parts = key.split('__');
+                if (matchFn(parts[0], parts[1] || '')) {
+                    motorIntensity[key] = Math.max(motorIntensity[key] || 0, intensity);
+                }
             }
         }
     }
+
+    // 2. Scent → green antenna glow
+    var leftConc = { attractive: 0, aversive: 0 };
+    var rightConc = { attractive: 0, aversive: 0 };
+    if (flyEntity) {
+        var leftPos = getAntennaWorldPos('left');
+        var rightPos = getAntennaWorldPos('right');
+        leftConc = computeScentConcentration(leftPos);
+        rightConc = computeScentConcentration(rightPos);
+    }
+
+    // 3. Decay collision flash
+    var decayRate = dt ? dt * 6.0 : 0.1;
+    collisionFlashLeft = Math.max(0, collisionFlashLeft - decayRate);
+    collisionFlashRight = Math.max(0, collisionFlashRight - decayRate);
+
+    // ---- Single pass over all meshes ----
+    for (var key in flyMeshMap) {
+        var mesh = flyMeshMap[key];
+        if (!mesh || !mesh.material || !mesh.material.emissive) continue;
+
+        var er = 0, eg = 0, eb = 0;
+        var parts = key.split('__');
+        var bodyName = parts[0];
+
+        // Motor glow (orange)
+        var mi = motorIntensity[key] || 0;
+        if (mi > 0) {
+            er += mi * 0.95;
+            eg += mi * 0.45;
+            eb += mi * 0.05;
+        }
+
+        // Antenna scent glow (green)
+        if (key.startsWith('antenna_')) {
+            var side = key.indexOf('left') !== -1 ? 'left' : 'right';
+            var sideConc = side === 'left'
+                ? leftConc.attractive + leftConc.aversive
+                : rightConc.attractive + rightConc.aversive;
+            var glow = Math.min(sideConc, 1.0);
+            if (glow > 0.05) {
+                er += glow * 0.4;
+                eg += glow * 0.7;
+                eb += glow * 0.1;
+            }
+        }
+
+        // Collision flash (white) on legs
+        if (bodyName.match(/coxa|femur|tibia|tarsus|claw/)) {
+            var isLeft = bodyName.indexOf('_left') !== -1;
+            var isRight = bodyName.indexOf('_right') !== -1;
+            var flash = 0;
+            if (isLeft) flash = collisionFlashLeft;
+            if (isRight) flash = Math.max(flash, collisionFlashRight);
+            if (flash > 0) {
+                er += flash * 0.8;
+                eg += flash * 0.8;
+                eb += flash * 0.8;
+            }
+        }
+
+        mesh.material.emissive.setRGB(
+            Math.min(er, 1.0),
+            Math.min(eg, 1.0),
+            Math.min(eb, 1.0)
+        );
+    }
+
+    // ---- Scent display bars ----
+    var scentLBar = document.getElementById('scent-left-bar');
+    var scentRBar = document.getElementById('scent-right-bar');
+    if (scentLBar) scentLBar.style.width = Math.min((leftConc.attractive + leftConc.aversive) * 100, 100) + '%';
+    if (scentRBar) scentRBar.style.width = Math.min((rightConc.attractive + rightConc.aversive) * 100, 100) + '%';
+
+    // ---- Proboscis extension ----
+    var proboscisRate = lastMotorRates ? (lastMotorRates.motor_proboscis || 0) : 0;
+    var proboscisExtend = Math.min(proboscisRate / 0.05, 1.0) * 0.03;
+    for (var key in flyMeshMap) {
+        if (!key.startsWith('labrum_') && key !== 'haustellum' && key !== 'rostrum') continue;
+        var mesh = flyMeshMap[key];
+        if (!mesh) continue;
+        if (mesh.userData.basePosY === undefined) mesh.userData.basePosY = mesh.position.y;
+        mesh.position.y = mesh.userData.basePosY - proboscisExtend;
+    }
+
+    // ---- Grooming animation ----
+    var aDN1_L = lastCommandRates ? (lastCommandRates.aDN1_L || 0) : 0;
+    var aDN1_R = lastCommandRates ? (lastCommandRates.aDN1_R || 0) : 0;
+    var groomIntensity = Math.min((aDN1_L + aDN1_R) / 0.2, 1.0);
+    for (var key in flyMeshMap) {
+        var bodyName = key.split('__')[0];
+        if (!bodyName.match(/T1_(left|right)/) || !bodyName.match(/tibia|tarsus/)) continue;
+        var mesh = flyMeshMap[key];
+        if (!mesh) continue;
+        if (mesh.userData.baseZ === undefined) mesh.userData.baseZ = mesh.position.z;
+        if (groomIntensity > 0.1) {
+            mesh.position.z = mesh.userData.baseZ + groomIntensity * 0.04;
+        } else {
+            mesh.position.z = mesh.userData.baseZ;
+        }
+    }
+}
+
+function flashLegsOnCollision(hitLeft, hitRight) {
+    if (hitLeft) collisionFlashLeft = 1.0;
+    if (hitRight) collisionFlashRight = 1.0;
 }
 
 // ========================================================================
@@ -1827,6 +2392,20 @@ function injectCustomStimulus() {
         activeStimulus = 'Custom ' + start + '-' + end;
         document.getElementById('stim-status').textContent = 'Active: ' + activeStimulus;
     }
+}
+
+// ========================================================================
+// COMMAND NEURON DISPLAY
+// ========================================================================
+function updateCommandDisplay(rates) {
+    var names = ['P9_L', 'P9_R', 'DNa02_L', 'DNa02_R', 'oDN1_L', 'oDN1_R', 'aDN1_L', 'aDN1_R'];
+    names.forEach(function(name) {
+        var rate = rates[name] || 0;
+        var valEl = document.getElementById('cmd-' + name + '-val');
+        var barEl = document.getElementById('cmd-' + name + '-bar');
+        if (valEl) valEl.textContent = rate.toFixed(3);
+        if (barEl) barEl.style.width = Math.min(rate / 0.3 * 100, 100) + '%';
+    });
 }
 
 // ========================================================================
@@ -1970,7 +2549,10 @@ document.getElementById('motor-modal').addEventListener('click', function(e) {
     if (e.target === this) closeMotorModal();
 });
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeMotorModal();
+    if (e.key === 'Escape') {
+        if (placementMode) { togglePlacement(placementMode); return; }
+        closeMotorModal();
+    }
 });
 
 // ========================================================================
@@ -2063,6 +2645,12 @@ function updateMetrics(m) {
 
     var realtime = m.steps_per_sec / 1000;
     document.getElementById('m-realtime').textContent = realtime.toFixed(1) + 'x';
+
+    // Command neuron rates
+    if (m.command_rates) {
+        lastCommandRates = m.command_rates;
+        updateCommandDisplay(m.command_rates);
+    }
 
     // Motor colors and grid
     lastMotorRates = m.motor_rates;

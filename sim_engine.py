@@ -26,6 +26,23 @@ from flywire_sim import (CUDA_KERNELS, compile_kernels, load_connectome_binary,
 
 ANNOTATIONS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "neuron_annotations.npz")
+NEURONS_JSON_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "static", "neurons.json")
+
+# Command neuron names (single neurons with scalar IDs)
+COMMAND_NEURON_NAMES = [
+    "DNa02_L", "DNa02_R",  # contralateral turning
+    "oDN1_L", "oDN1_R",    # stopping
+    "aDN1_L", "aDN1_R",    # grooming
+    "P9_L", "P9_R",        # forward speed
+]
+
+# Sensory neuron group names (arrays of IDs)
+SENSORY_GROUP_NAMES = [
+    "GRN_SUGAR_L", "GRN_SUGAR_R",
+    "ORN_ATTRACTIVE_LEFT", "ORN_ATTRACTIVE_RIGHT",
+    "ORN_AVOIDANT_LEFT", "ORN_AVOIDANT_RIGHT",
+]
 
 
 class SimEngine:
@@ -104,11 +121,28 @@ class SimEngine:
         self.send_active_indices = True
         self.send_group_rates = True
         self.send_motor_rates = True
-        self.active_indices_interval = 3  # only transfer every Nth batch
+        self.active_indices_interval = 1  # transfer every batch for responsive 3D glow
         self._batch_counter = 0
 
         # Load annotations
         self._load_annotations()
+
+        # Load command/sensory neuron definitions from neurons.json
+        self._command_neurons = {}   # name -> neuron index (int)
+        self._sensory_groups = {}    # name -> np.array of neuron indices
+        self._load_neurons_json()
+
+        # GPU arrays for command neuron spike counting
+        self._n_command = len(self._command_neurons)
+        if self._n_command > 0:
+            self._command_indices_gpu = cp.asarray(
+                np.array(list(self._command_neurons.values()), dtype=np.int64))
+            self._command_spike_accum = cp.zeros(self._n_command, dtype=cp.uint64)
+            self._command_names = list(self._command_neurons.keys())
+        else:
+            self._command_indices_gpu = None
+            self._command_spike_accum = None
+            self._command_names = []
 
         # Metrics history
         self.group_rates_history = []
@@ -197,6 +231,50 @@ class SimEngine:
             self._setup_fallback_groups()
             self._use_annotations = False
 
+    def _load_neurons_json(self):
+        """Load neurons.json for command neuron and sensory group definitions."""
+        import json
+        if not os.path.exists(NEURONS_JSON_FILE):
+            print(f"No neurons.json found ({NEURONS_JSON_FILE})")
+            return
+        if self._root_id_to_index is None:
+            print("  No root_id mapping — skipping neurons.json")
+            return
+
+        with open(NEURONS_JSON_FILE, 'r') as f:
+            neurons_data = json.load(f)
+
+        # Resolve command neurons (single ID → single index)
+        for name in COMMAND_NEURON_NAMES:
+            if name not in neurons_data:
+                continue
+            entry = neurons_data[name]
+            rid = entry["id"]
+            if isinstance(rid, list):
+                continue  # skip array entries for command neurons
+            rid_int = int(rid)
+            if rid_int in self._root_id_to_index:
+                self._command_neurons[name] = self._root_id_to_index[rid_int]
+
+        # Resolve sensory groups (array of IDs → array of indices)
+        for name in SENSORY_GROUP_NAMES:
+            if name not in neurons_data:
+                continue
+            entry = neurons_data[name]
+            rid_list = entry["id"]
+            if not isinstance(rid_list, list):
+                rid_list = [rid_list]
+            indices = []
+            for rid in rid_list:
+                rid_int = int(rid)
+                if rid_int in self._root_id_to_index:
+                    indices.append(self._root_id_to_index[rid_int])
+            if indices:
+                self._sensory_groups[name] = np.array(indices, dtype=np.int32)
+
+        print(f"  Neurons.json: {len(self._command_neurons)} command neurons, "
+              f"{len(self._sensory_groups)} sensory groups resolved")
+
     def _setup_fallback_groups(self):
         """Fallback: equal-size index-range groups."""
         self.num_groups = 20
@@ -251,16 +329,13 @@ class SimEngine:
 
     def inject_stimulus(self, neuron_indices, amplitude=0.5):
         """Inject constant current to specified neurons.
-        
+
         Args:
             neuron_indices: List of neuron IDs
             amplitude: Current injection amplitude (0.0-1.0+)
         """
         self._stimulus_indices = cp.asarray(np.array(neuron_indices, dtype=np.int64))
         self._stimulus_amplitude = float(amplitude)
-        # Clear rate-based stimulus
-        self._rate_stim_neurons = None
-        self._rate_stim_rates = None
 
     def inject_stimulus_by_rate(self, neuron_rates):
         """Inject stimulus by forcing neurons to spike at specified rates.
@@ -287,10 +362,6 @@ class SimEngine:
         
         self._rate_stim_neurons = cp.asarray(neuron_indices)
         self._rate_stim_rates = cp.asarray(np.array(probabilities, dtype=np.float32))
-        
-        # Clear current-based stimulus
-        self._stimulus_indices = None
-        self._stimulus_amplitude = 0.0
 
     def clear_stimulus(self):
         """Clear all stimulus (both current-based and rate-based)."""
@@ -410,6 +481,10 @@ class SimEngine:
         rate_stim_neurons = self._rate_stim_neurons
         rate_stim_rates = self._rate_stim_rates
 
+        # Reset command neuron accumulators
+        if self._command_spike_accum is not None:
+            self._command_spike_accum.fill(0)
+
         for sub in range(n):
             d_num_spikes.fill(0)
 
@@ -459,6 +534,14 @@ class SimEngine:
                     if d_spike_bits[word_idx] & (1 << bit_idx):
                         self._tracked_spike_counts[i] += 1
 
+            # Track command neuron spikes
+            if self._command_indices_gpu is not None:
+                for i, nid in enumerate(self._command_indices_gpu):
+                    word_idx = nid // 32
+                    bit_idx = nid % 32
+                    if d_spike_bits[word_idx] & (1 << bit_idx):
+                        self._command_spike_accum[i] += 1
+
             # Propagate v2 — reads d_num_spikes from device memory, no CPU sync
             k_propagate_v2(
                 (MAX_PROP_BLOCKS,), (PROP_BLOCK,),
@@ -505,6 +588,14 @@ class SimEngine:
                 rate = float(motor_spike_counts[g]) / (n * group_n) if group_n > 0 else 0
                 motor_rates[name] = round(rate, 6)
             result["motor_rates"] = motor_rates
+
+        # Command neuron rates
+        if self._command_spike_accum is not None and self._n_command > 0:
+            cmd_counts = self._command_spike_accum.get()
+            command_rates = {}
+            for i, name in enumerate(self._command_names):
+                command_rates[name] = round(float(cmd_counts[i]) / n, 6)
+            result["command_rates"] = command_rates
 
         # Active indices (for 3D viz) — only transfer every Nth batch
         self._batch_counter += 1
@@ -564,6 +655,124 @@ class SimEngine:
                 "active": idx in active_set,
             })
         return {"group": group_name, "neurons": neurons}
+
+    def get_command_neuron_info(self):
+        """Return command neuron names and indices for the frontend."""
+        return {name: idx for name, idx in self._command_neurons.items()}
+
+    def get_sensory_group_info(self):
+        """Return sensory group names and sizes for the frontend."""
+        return {name: len(indices) for name, indices in self._sensory_groups.items()}
+
+    def apply_environmental_scent(self, left_conc, right_conc):
+        """Inject olfactory stimulus proportional to scent concentration at each antenna.
+
+        Args:
+            left_conc: Scent concentration at left antenna (0.0-1.0)
+            right_conc: Scent concentration at right antenna (0.0-1.0)
+        """
+        neuron_rates = []
+        max_rate_hz = 200  # Peak ORN firing rate
+
+        if left_conc > 0.01 and "ORN_ATTRACTIVE_LEFT" in self._sensory_groups:
+            for idx in self._sensory_groups["ORN_ATTRACTIVE_LEFT"]:
+                neuron_rates.append({"id": int(idx), "rate": left_conc * max_rate_hz})
+
+        if right_conc > 0.01 and "ORN_ATTRACTIVE_RIGHT" in self._sensory_groups:
+            for idx in self._sensory_groups["ORN_ATTRACTIVE_RIGHT"]:
+                neuron_rates.append({"id": int(idx), "rate": right_conc * max_rate_hz})
+
+        if neuron_rates:
+            self._apply_rate_stimulus_additive(neuron_rates)
+
+    def apply_aversive_scent(self, left_conc, right_conc):
+        """Inject aversive olfactory stimulus at each antenna.
+
+        Args:
+            left_conc: Aversive scent concentration at left antenna (0.0-1.0)
+            right_conc: Aversive scent concentration at right antenna (0.0-1.0)
+        """
+        neuron_rates = []
+        max_rate_hz = 200
+
+        if left_conc > 0.01 and "ORN_AVOIDANT_LEFT" in self._sensory_groups:
+            for idx in self._sensory_groups["ORN_AVOIDANT_LEFT"]:
+                neuron_rates.append({"id": int(idx), "rate": left_conc * max_rate_hz})
+
+        if right_conc > 0.01 and "ORN_AVOIDANT_RIGHT" in self._sensory_groups:
+            for idx in self._sensory_groups["ORN_AVOIDANT_RIGHT"]:
+                neuron_rates.append({"id": int(idx), "rate": right_conc * max_rate_hz})
+
+        if neuron_rates:
+            self._apply_rate_stimulus_additive(neuron_rates)
+
+    def apply_collision_stimulus(self, hit_left, hit_right, intensity=1.0):
+        """Inject mechanosensory stimulus from obstacle collision.
+
+        Args:
+            hit_left: Whether left side was hit
+            hit_right: Whether right side was hit
+            intensity: Collision intensity (0.0-1.0)
+        """
+        amp = 0.8 * intensity
+        indices = []
+
+        if hit_left and "Touch (left leg/body)" in self._stimuli:
+            indices.extend(self._stimuli["Touch (left leg/body)"].tolist())
+        if hit_right and "Touch (right leg/body)" in self._stimuli:
+            indices.extend(self._stimuli["Touch (right leg/body)"].tolist())
+
+        if indices:
+            self._apply_current_stimulus_additive(np.array(indices, dtype=np.int64), amp)
+
+    def apply_gustatory_stimulus(self, intensity=1.0):
+        """Inject gustatory stimulus (sugar contact).
+
+        Args:
+            intensity: Stimulus intensity (0.0-1.0)
+        """
+        amp = 0.8 * intensity
+        indices = []
+        if "Sugar (proboscis)" in self._stimuli:
+            indices.extend(self._stimuli["Sugar (proboscis)"].tolist())
+        if "GRN_SUGAR_L" in self._sensory_groups:
+            indices.extend(self._sensory_groups["GRN_SUGAR_L"].tolist())
+        if "GRN_SUGAR_R" in self._sensory_groups:
+            indices.extend(self._sensory_groups["GRN_SUGAR_R"].tolist())
+
+        if indices:
+            self._apply_current_stimulus_additive(np.array(indices, dtype=np.int64), amp)
+
+    def _apply_rate_stimulus_additive(self, neuron_rates):
+        """Add rate-based stimulus without clearing current-based stimulus."""
+        if not neuron_rates:
+            return
+
+        neuron_ids = [nr["id"] for nr in neuron_rates]
+        rates_hz = [nr["rate"] for nr in neuron_rates]
+
+        neuron_indices = np.array(neuron_ids, dtype=np.int64)
+        prob_scale = self.dt / 1000.0
+        probabilities = np.array([r * prob_scale for r in rates_hz], dtype=np.float32)
+
+        if self._rate_stim_neurons is None:
+            self._rate_stim_neurons = cp.asarray(neuron_indices)
+            self._rate_stim_rates = cp.asarray(probabilities)
+        else:
+            self._rate_stim_neurons = cp.concatenate([
+                self._rate_stim_neurons, cp.asarray(neuron_indices)])
+            self._rate_stim_rates = cp.concatenate([
+                self._rate_stim_rates, cp.asarray(probabilities)])
+
+    def _apply_current_stimulus_additive(self, neuron_indices, amplitude):
+        """Add current-based stimulus without clearing rate-based stimulus."""
+        new_indices = cp.asarray(neuron_indices)
+        if self._stimulus_indices is None:
+            self._stimulus_indices = new_indices
+            self._stimulus_amplitude = float(amplitude)
+        else:
+            self._stimulus_indices = cp.concatenate([self._stimulus_indices, new_indices])
+            self._stimulus_amplitude = max(self._stimulus_amplitude, float(amplitude))
 
     def apply_predefined_stimulus(self, name, amplitude=None):
         if name not in self._stimuli:
