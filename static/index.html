@@ -1175,6 +1175,7 @@ function loadFlyModel() {
             'labrum_right': 'Sugar (right proboscis)',
         };
 
+        var flyMeshIdx = 10; // start fly meshes at renderOrder 10 (brain uses 2-3)
         model.traverse(function(child) {
             if (!child.isMesh) return;
 
@@ -1202,9 +1203,6 @@ function loadFlyModel() {
             var hasVertexColors = child.geometry && child.geometry.attributes &&
                                   child.geometry.attributes.color;
 
-            // Only disable depthWrite for very transparent parts (wings, membranes)
-            var isVeryTransparent = (opacity < 0.25);
-
             // Replace material with transparent Phong
             child.material = new THREE.MeshPhongMaterial({
                 vertexColors: hasVertexColors,
@@ -1214,10 +1212,12 @@ function loadFlyModel() {
                 transparent: true,
                 opacity: opacity,
                 side: THREE.DoubleSide,
-                depthWrite: !isVeryTransparent,
+                depthWrite: (opacity >= 0.25),
                 flatShading: false,
             });
-            child.renderOrder = isVeryTransparent ? 1 : 0;
+            // Unique renderOrder per mesh prevents Three.js from re-sorting
+            // transparent objects each frame (which causes flicker)
+            child.renderOrder = flyMeshIdx++;
             child.castShadow = true;
 
             // Store in mesh map
@@ -1271,18 +1271,19 @@ function computeHeadBounds() {
         }
     }
     if (found) {
-        // Convert world-space bounds to flyEntity local space
-        // (brainGroup.position is set in flyEntity local space)
-        var invMatrix = new THREE.Matrix4().copy(flyEntity.matrixWorld).invert();
-        box.applyMatrix4(invMatrix);
-
         flyHeadCenter = new THREE.Vector3();
         box.getCenter(flyHeadCenter);
         flyHeadSize = new THREE.Vector3();
         box.getSize(flyHeadSize);
-        console.log('Head bounds (local): center=', flyHeadCenter, 'size=', flyHeadSize);
+
+        // Head mesh bounds extend into the neck, so nudge center
+        // forward (+Z = anterior) and down (-Y = ventral)
+        flyHeadCenter.z += flyHeadSize.z * 0.25;
+        flyHeadCenter.y -= flyHeadSize.y * 0.20;
+
+        console.log('Head bounds: center=', flyHeadCenter, 'size=', flyHeadSize);
     } else {
-        flyHeadCenter = new THREE.Vector3(0, 0.1, 0.6);
+        flyHeadCenter = new THREE.Vector3(0, -0.05, 0.7);
         flyHeadSize = new THREE.Vector3(0.8, 0.5, 0.5);
         console.log('Head bounds (fallback): center=', flyHeadCenter, 'size=', flyHeadSize);
     }
@@ -1319,13 +1320,12 @@ function repositionBrainInHead() {
 }
 
 function setFlyOpacity(opacity) {
-    var isVeryTransparent = (opacity < 0.25);
     for (var key in flyMeshMap) {
         var mesh = flyMeshMap[key];
         if (!mesh || !mesh.material) continue;
         mesh.material.opacity = opacity;
-        mesh.material.depthWrite = !isVeryTransparent;
-        mesh.renderOrder = isVeryTransparent ? 1 : 0;
+        mesh.material.depthWrite = (opacity >= 0.25);
+        // renderOrder stays unique per mesh (assigned at load time)
     }
 }
 
