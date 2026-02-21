@@ -42,6 +42,7 @@ SENSORY_GROUP_NAMES = [
     "GRN_SUGAR_L", "GRN_SUGAR_R",
     "ORN_ATTRACTIVE_LEFT", "ORN_ATTRACTIVE_RIGHT",
     "ORN_AVOIDANT_LEFT", "ORN_AVOIDANT_RIGHT",
+    "JO_C", "JO_E", "JO_F",
 ]
 
 
@@ -99,13 +100,19 @@ class SimEngine:
         self.neuron_blocks  = (self.n_neurons + self.BLOCK - 1) // self.BLOCK
         self.compact_blocks = (self.spike_words + self.BLOCK - 1) // self.BLOCK
 
-        # Stimulus state
+        # Stimulus state (manual — persistent until clear_stimulus)
         self._stimulus_indices = None
         self._stimulus_amplitude = 0.0
-        
-        # Rate-based stimulus (neuron_id -> firing_rate)
+
+        # Rate-based stimulus (manual — persistent until clear_stimulus)
         self._rate_stim_neurons = None
         self._rate_stim_rates = None
+
+        # Environmental stimulus (ephemeral — cleared after each step batch)
+        self._env_rate_neurons = None
+        self._env_rate_rates = None
+        self._env_current_indices = None
+        self._env_current_amplitude = 0.0
 
         # Tracked neurons for custom I/O analysis
         self._tracked_neurons = None
@@ -266,9 +273,16 @@ class SimEngine:
                 rid_list = [rid_list]
             indices = []
             for rid in rid_list:
-                rid_int = int(rid)
-                if rid_int in self._root_id_to_index:
-                    indices.append(self._root_id_to_index[rid_int])
+                # Handle comma-separated IDs in a single string
+                rid_str = str(rid).strip()
+                if "," in rid_str:
+                    sub_ids = [s.strip() for s in rid_str.split(",")]
+                else:
+                    sub_ids = [rid_str]
+                for sub_id in sub_ids:
+                    rid_int = int(sub_id)
+                    if rid_int in self._root_id_to_index:
+                        indices.append(self._root_id_to_index[rid_int])
             if indices:
                 self._sensory_groups[name] = np.array(indices, dtype=np.int32)
 
@@ -364,11 +378,15 @@ class SimEngine:
         self._rate_stim_rates = cp.asarray(np.array(probabilities, dtype=np.float32))
 
     def clear_stimulus(self):
-        """Clear all stimulus (both current-based and rate-based)."""
+        """Clear all stimulus (manual + environmental)."""
         self._stimulus_indices = None
         self._stimulus_amplitude = 0.0
         self._rate_stim_neurons = None
         self._rate_stim_rates = None
+        self._env_rate_neurons = None
+        self._env_rate_rates = None
+        self._env_current_indices = None
+        self._env_current_amplitude = 0.0
 
     def set_noise_amp(self, value):
         self.noise_amp = np.float32(value)
@@ -476,10 +494,32 @@ class SimEngine:
         MAX_PROP_BLOCKS = self.MAX_PROP_BLOCKS
         n_neurons_i32 = np.int32(self.n_neurons)
         spike_words_i32 = np.int32(self.spike_words)
+        # Combine manual + environmental stimulus
         stim_indices = self._stimulus_indices
         stim_amp = self._stimulus_amplitude
+        if self._env_current_indices is not None:
+            if stim_indices is not None:
+                stim_indices = cp.concatenate([stim_indices, self._env_current_indices])
+                stim_amp = max(stim_amp, self._env_current_amplitude)
+            else:
+                stim_indices = self._env_current_indices
+                stim_amp = self._env_current_amplitude
+
         rate_stim_neurons = self._rate_stim_neurons
         rate_stim_rates = self._rate_stim_rates
+        if self._env_rate_neurons is not None:
+            if rate_stim_neurons is not None:
+                rate_stim_neurons = cp.concatenate([rate_stim_neurons, self._env_rate_neurons])
+                rate_stim_rates = cp.concatenate([rate_stim_rates, self._env_rate_rates])
+            else:
+                rate_stim_neurons = self._env_rate_neurons
+                rate_stim_rates = self._env_rate_rates
+
+        # Clear environmental stimulus (re-sent each frame by frontend)
+        self._env_rate_neurons = None
+        self._env_rate_rates = None
+        self._env_current_indices = None
+        self._env_current_amplitude = 0.0
 
         # Reset command neuron accumulators
         if self._command_spike_accum is not None:
@@ -500,19 +540,16 @@ class SimEngine:
                  np.uint32(self.seed), np.uint32(self.current_step),
                  self.noise_amp))
 
-            # Rate-based stimulus - inject Poisson current (biologically realistic)
-            # Instead of forcing spikes, generate Poisson input and inject as current
+            # Rate-based stimulus - inject Poisson current (vectorized)
             if rate_stim_neurons is not None:
                 rng = cp.random.default_rng(self.seed + self.current_step)
                 rand_vals = rng.random(len(rate_stim_neurons), dtype=cp.float32)
-                # Poisson spike generation: prob = rate * dt/1000
-                # If spike occurs, inject scaled current (like PyTorch scalePoisson=250)
-                current_scale = 250.0  # Match PyTorch scalePoisson parameter
-                for i in range(len(rate_stim_neurons)):
-                    if rand_vals[i] < rate_stim_rates[i]:
-                        nid = int(rate_stim_neurons[i])
-                        # Inject current instead of forcing spike
-                        d_current[nid] += current_scale
+                current_scale = cp.float32(250.0)
+                fired_mask = rand_vals < rate_stim_rates
+                fired_indices = rate_stim_neurons[fired_mask]
+                if fired_indices.size > 0:
+                    import cupyx
+                    cupyx.scatter_add(d_current, fired_indices, cp.full(fired_indices.shape, current_scale, dtype=cp.float32))
 
             k_compact(
                 (compact_blocks,), (BLOCK,),
@@ -526,21 +563,23 @@ class SimEngine:
                  neuron_to_motor, d_motor_counts, d_total_spikes,
                  spike_words_i32, n_neurons_i32))
 
-            # Track specific neurons if requested
+            # Track specific neurons if requested (vectorized)
             if self._tracked_neurons is not None:
-                for i, nid in enumerate(self._tracked_neurons):
-                    word_idx = nid // 32
-                    bit_idx = nid % 32
-                    if d_spike_bits[word_idx] & (1 << bit_idx):
-                        self._tracked_spike_counts[i] += 1
+                tracked = cp.asarray(self._tracked_neurons)
+                word_idxs = tracked >> 5  # // 32
+                bit_idxs = tracked & 31   # % 32
+                spike_words = d_spike_bits[word_idxs]
+                fired = ((spike_words >> bit_idxs) & 1).astype(cp.uint64)
+                self._tracked_spike_counts += fired
 
-            # Track command neuron spikes
+            # Track command neuron spikes (vectorized)
             if self._command_indices_gpu is not None:
-                for i, nid in enumerate(self._command_indices_gpu):
-                    word_idx = nid // 32
-                    bit_idx = nid % 32
-                    if d_spike_bits[word_idx] & (1 << bit_idx):
-                        self._command_spike_accum[i] += 1
+                cmd = cp.asarray(self._command_indices_gpu)
+                word_idxs = cmd >> 5
+                bit_idxs = cmd & 31
+                spike_words = d_spike_bits[word_idxs]
+                fired = ((spike_words >> bit_idxs) & 1).astype(cp.uint64)
+                self._command_spike_accum += fired
 
             # Propagate v2 — reads d_num_spikes from device memory, no CPU sync
             k_propagate_v2(
@@ -744,7 +783,7 @@ class SimEngine:
             self._apply_current_stimulus_additive(np.array(indices, dtype=np.int64), amp)
 
     def _apply_rate_stimulus_additive(self, neuron_rates):
-        """Add rate-based stimulus without clearing current-based stimulus."""
+        """Add environmental rate-based stimulus (cleared after each step batch)."""
         if not neuron_rates:
             return
 
@@ -755,24 +794,24 @@ class SimEngine:
         prob_scale = self.dt / 1000.0
         probabilities = np.array([r * prob_scale for r in rates_hz], dtype=np.float32)
 
-        if self._rate_stim_neurons is None:
-            self._rate_stim_neurons = cp.asarray(neuron_indices)
-            self._rate_stim_rates = cp.asarray(probabilities)
+        if self._env_rate_neurons is None:
+            self._env_rate_neurons = cp.asarray(neuron_indices)
+            self._env_rate_rates = cp.asarray(probabilities)
         else:
-            self._rate_stim_neurons = cp.concatenate([
-                self._rate_stim_neurons, cp.asarray(neuron_indices)])
-            self._rate_stim_rates = cp.concatenate([
-                self._rate_stim_rates, cp.asarray(probabilities)])
+            self._env_rate_neurons = cp.concatenate([
+                self._env_rate_neurons, cp.asarray(neuron_indices)])
+            self._env_rate_rates = cp.concatenate([
+                self._env_rate_rates, cp.asarray(probabilities)])
 
     def _apply_current_stimulus_additive(self, neuron_indices, amplitude):
-        """Add current-based stimulus without clearing rate-based stimulus."""
+        """Add environmental current-based stimulus (cleared after each step batch)."""
         new_indices = cp.asarray(neuron_indices)
-        if self._stimulus_indices is None:
-            self._stimulus_indices = new_indices
-            self._stimulus_amplitude = float(amplitude)
+        if self._env_current_indices is None:
+            self._env_current_indices = new_indices
+            self._env_current_amplitude = float(amplitude)
         else:
-            self._stimulus_indices = cp.concatenate([self._stimulus_indices, new_indices])
-            self._stimulus_amplitude = max(self._stimulus_amplitude, float(amplitude))
+            self._env_current_indices = cp.concatenate([self._env_current_indices, new_indices])
+            self._env_current_amplitude = max(self._env_current_amplitude, float(amplitude))
 
     def apply_predefined_stimulus(self, name, amplitude=None):
         if name not in self._stimuli:

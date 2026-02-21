@@ -125,6 +125,29 @@ input[type="range"] {
     min-width: 36px;
     text-align: right;
 }
+.io-preset-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 2px;
+}
+.io-label {
+    font-size: 10px;
+    color: #cbd5e1;
+    min-width: 72px;
+    flex-shrink: 0;
+}
+.io-slider {
+    flex: 1;
+    height: 4px;
+}
+.io-hz {
+    font-size: 10px;
+    color: #60a5fa;
+    min-width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
 .metric-card {
     background: #1e293b;
     border-radius: 8px;
@@ -567,20 +590,195 @@ input[type="range"] {
         </div>
     </div>
 
-    <!-- Right Panel: Motor Output -->
+    <!-- Right Panel: I/O Panel -->
     <div class="panel panel-right">
+        <!-- Sensory Input Presets -->
+        <h2>Sensory Input</h2>
+        <p style="font-size:10px; color:#64748b; margin-bottom:6px;">Set firing rates (Hz) for sensory neuron groups</p>
+
+        <div id="sensory-presets" style="margin-bottom:8px;">
+            <div style="font-size:9px;color:#60a5fa;font-weight:600;margin:6px 0 3px;">OLFACTORY</div>
+            <div class="io-preset-row">
+                <span class="io-label">Attractive L</span>
+                <input type="range" class="io-slider" id="io-ORN_ATTRACTIVE_LEFT" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-ORN_ATTRACTIVE_LEFT-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">Attractive R</span>
+                <input type="range" class="io-slider" id="io-ORN_ATTRACTIVE_RIGHT" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-ORN_ATTRACTIVE_RIGHT-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">Aversive L</span>
+                <input type="range" class="io-slider" id="io-ORN_AVOIDANT_LEFT" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-ORN_AVOIDANT_LEFT-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">Aversive R</span>
+                <input type="range" class="io-slider" id="io-ORN_AVOIDANT_RIGHT" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-ORN_AVOIDANT_RIGHT-hz">0</span>
+            </div>
+
+            <div style="font-size:9px;color:#fbbf24;font-weight:600;margin:6px 0 3px;">GUSTATORY</div>
+            <div class="io-preset-row">
+                <span class="io-label">Sugar L</span>
+                <input type="range" class="io-slider" id="io-GRN_SUGAR_L" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-GRN_SUGAR_L-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">Sugar R</span>
+                <input type="range" class="io-slider" id="io-GRN_SUGAR_R" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-GRN_SUGAR_R-hz">0</span>
+            </div>
+
+            <div style="font-size:9px;color:#f472b6;font-weight:600;margin:6px 0 3px;">AUDITORY</div>
+            <div class="io-preset-row">
+                <span class="io-label">JO-C</span>
+                <input type="range" class="io-slider" id="io-JO_C" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-JO_C-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">JO-E</span>
+                <input type="range" class="io-slider" id="io-JO_E" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-JO_E-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">JO-F</span>
+                <input type="range" class="io-slider" id="io-JO_F" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-JO_F-hz">0</span>
+            </div>
+
+            <div style="font-size:9px;color:#fb923c;font-weight:600;margin:6px 0 3px;">MECHANOSENSORY</div>
+            <div class="io-preset-row">
+                <span class="io-label">Touch L</span>
+                <input type="range" class="io-slider" id="io-Touch (left leg/body)" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-Touch (left leg/body)-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">Touch R</span>
+                <input type="range" class="io-slider" id="io-Touch (right leg/body)" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-Touch (right leg/body)-hz">0</span>
+            </div>
+            <div class="io-preset-row">
+                <span class="io-label">Proboscis</span>
+                <input type="range" class="io-slider" id="io-Sugar (proboscis)" min="0" max="200" value="0" step="5">
+                <span class="io-hz" id="io-Sugar (proboscis)-hz">0</span>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:4px;margin-bottom:10px;">
+            <button id="btn-apply-io" onclick="applyIOPresets()" style="flex:1;background:#2563eb;">Apply</button>
+            <button id="btn-clear-io" onclick="clearIOPresets()" style="flex:1;" class="clear">Clear All</button>
+        </div>
+
+        <div style="border-top:1px solid #1e293b;margin:8px 0;"></div>
+
+        <!-- Behavioral Output -->
+        <h2>Behavioral Output</h2>
+        <p style="font-size:10px; color:#64748b; margin-bottom:6px;">Command neuron responses (real-time)</p>
+
+        <div id="command-display" style="margin-bottom:8px;">
+            <!-- Forward Speed (P9) -->
+            <div style="font-size:9px;color:#34d399;font-weight:600;margin:4px 0 2px;">FORWARD SPEED (P9)</div>
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:5px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Left</span><span id="cmd-P9_L-val" style="color:#34d399;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-P9_L-bar" style="height:100%;width:0%;background:#34d399;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Right</span><span id="cmd-P9_R-val" style="color:#34d399;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-P9_R-bar" style="height:100%;width:0%;background:#34d399;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Turning (DNa02) -->
+            <div style="font-size:9px;color:#60a5fa;font-weight:600;margin:4px 0 2px;">TURNING (DNa02)</div>
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:5px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Left</span><span id="cmd-DNa02_L-val" style="color:#60a5fa;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-DNa02_L-bar" style="height:100%;width:0%;background:#60a5fa;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Right</span><span id="cmd-DNa02_R-val" style="color:#60a5fa;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-DNa02_R-bar" style="height:100%;width:0%;background:#60a5fa;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stopping (oDN1) -->
+            <div style="font-size:9px;color:#f97316;font-weight:600;margin:4px 0 2px;">STOPPING (oDN1)</div>
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:5px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Left</span><span id="cmd-oDN1_L-val" style="color:#f97316;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-oDN1_L-bar" style="height:100%;width:0%;background:#f97316;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Right</span><span id="cmd-oDN1_R-val" style="color:#f97316;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-oDN1_R-bar" style="height:100%;width:0%;background:#f97316;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grooming (aDN1) -->
+            <div style="font-size:9px;color:#a78bfa;font-weight:600;margin:4px 0 2px;">GROOMING (aDN1)</div>
+            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:5px;">
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Left</span><span id="cmd-aDN1_L-val" style="color:#a78bfa;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-aDN1_L-bar" style="height:100%;width:0%;background:#a78bfa;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+                <div class="cmd-bar-container" style="flex:1;">
+                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
+                        <span>Right</span><span id="cmd-aDN1_R-val" style="color:#a78bfa;">0</span>
+                    </div>
+                    <div style="height:6px;background:#0f172a;border-radius:3px;overflow:hidden;">
+                        <div id="cmd-aDN1_R-bar" style="height:100%;width:0%;background:#a78bfa;border-radius:3px;transition:width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="behavior-summary" style="font-size:10px;color:#e2e8f0;background:#0f172a;padding:4px 6px;border-radius:4px;margin-top:4px;text-align:center;min-height:16px;"></div>
+        </div>
+
+        <div style="border-top:1px solid #1e293b;margin:8px 0;"></div>
+
+        <!-- Fly Status -->
         <h2>Fly Status</h2>
-        <p style="font-size:11px; color:#64748b; margin-bottom:8px;">
-            Click fly in the 3D scene to stimulate. Orange glow = motor activity.
-        </p>
-        <div class="metric-card"><div class="metric-row">
-            <span class="metric-label">Fly Speed</span>
-            <span class="metric-value" id="m-flyspeed" style="font-size:14px;">0.00</span>
-        </div></div>
-        <div class="metric-card"><div class="metric-row">
-            <span class="metric-label">Heading</span>
-            <span class="metric-value" id="m-flyheading" style="font-size:14px;">0&deg;</span>
-        </div></div>
+        <div style="display:flex;gap:4px;margin-bottom:4px;">
+            <div class="metric-card" style="flex:1;"><div class="metric-row">
+                <span class="metric-label">Speed</span>
+                <span class="metric-value" id="m-flyspeed" style="font-size:13px;">0.00</span>
+            </div></div>
+            <div class="metric-card" style="flex:1;"><div class="metric-row">
+                <span class="metric-label">Heading</span>
+                <span class="metric-value" id="m-flyheading" style="font-size:13px;">0&deg;</span>
+            </div></div>
+        </div>
 
         <label>Fly Opacity</label>
         <div class="slider-row">
@@ -589,95 +787,21 @@ input[type="range"] {
             <span class="slider-val" id="fly-opacity-val">0.35</span>
         </div>
 
-        <h2>Command Neurons</h2>
-        <div id="command-display" style="margin-bottom:8px;">
-            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>P9 L</span><span id="cmd-P9_L-val" style="color:#34d399;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-P9_L-bar" style="height:100%;width:0%;background:#34d399;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>P9 R</span><span id="cmd-P9_R-val" style="color:#34d399;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-P9_R-bar" style="height:100%;width:0%;background:#34d399;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>DNa02 L</span><span id="cmd-DNa02_L-val" style="color:#60a5fa;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-DNa02_L-bar" style="height:100%;width:0%;background:#60a5fa;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>DNa02 R</span><span id="cmd-DNa02_R-val" style="color:#60a5fa;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-DNa02_R-bar" style="height:100%;width:0%;background:#60a5fa;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>oDN1 L</span><span id="cmd-oDN1_L-val" style="color:#f97316;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-oDN1_L-bar" style="height:100%;width:0%;background:#f97316;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>oDN1 R</span><span id="cmd-oDN1_R-val" style="color:#f97316;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-oDN1_R-bar" style="height:100%;width:0%;background:#f97316;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="cmd-pair" style="display:flex;gap:4px;margin-bottom:3px;">
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>aDN1 L</span><span id="cmd-aDN1_L-val" style="color:#a78bfa;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-aDN1_L-bar" style="height:100%;width:0%;background:#a78bfa;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-                <div class="cmd-bar-container" style="flex:1;">
-                    <div style="font-size:9px;color:#94a3b8;display:flex;justify-content:space-between;">
-                        <span>aDN1 R</span><span id="cmd-aDN1_R-val" style="color:#a78bfa;">0</span>
-                    </div>
-                    <div style="height:4px;background:#0f172a;border-radius:2px;overflow:hidden;">
-                        <div id="cmd-aDN1_R-bar" style="height:100%;width:0%;background:#a78bfa;border-radius:2px;transition:width 0.3s;"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <h2>Motor Output</h2>
         <p style="font-size:10px; color:#475569; margin-bottom:4px;">Click cards to see active neurons</p>
         <div class="motor-grid" id="motor-grid"></div>
 
         <h2 style="margin-top:12px;">Network</h2>
-        <div class="metric-card"><div class="metric-row">
-            <span class="metric-label">Neurons</span>
-            <span class="metric-value" id="m-neurons" style="font-size:14px;">-</span>
-        </div></div>
-        <div class="metric-card"><div class="metric-row">
-            <span class="metric-label">Synapses</span>
-            <span class="metric-value" id="m-synapses" style="font-size:14px;">-</span>
-        </div></div>
+        <div style="display:flex;gap:4px;">
+            <div class="metric-card" style="flex:1;"><div class="metric-row">
+                <span class="metric-label">Neurons</span>
+                <span class="metric-value" id="m-neurons" style="font-size:13px;">-</span>
+            </div></div>
+            <div class="metric-card" style="flex:1;"><div class="metric-row">
+                <span class="metric-label">Synapses</span>
+                <span class="metric-value" id="m-synapses" style="font-size:13px;">-</span>
+            </div></div>
+        </div>
     </div>
 </div>
 
@@ -712,6 +836,7 @@ let ws = null;
 let running = false;
 let bodyInfo = null;
 let activeStimulus = null;
+let envStimulusSuppressed = false;
 let lastActiveIndices = [];
 let lastMotorRates = null;
 let lastCommandRates = null;
@@ -1682,6 +1807,7 @@ function updateEnvStatus() {
 }
 
 function updateEnvironment(dt) {
+    if (!running) return;
     var attractRange = 5;
     var contactRange = 0.6;
     var obstacleRange = 1.0;
@@ -1894,6 +2020,7 @@ function computeScentConcentration(worldPos) {
 
 function sendScentStimulus() {
     if (!ws || ws.readyState !== 1) return;
+    if (!running || envStimulusSuppressed) return;
     var now = performance.now();
     if (now - lastScentSendTime < SCENT_SEND_INTERVAL) return;
     lastScentSendTime = now;
@@ -1954,12 +2081,15 @@ function animate(time) {
     var dt = Math.min((time - lastFrameTime) / 1000, 0.05);
     lastFrameTime = time;
 
-    updateFlyMovement(dt);
-    animateLegs(dt);
-    updateEnvironment(dt);
-    updateScentParticles(dt);
-    sendScentStimulus();
-    updateFlyVisualFeedback(dt);
+    // Only update simulation-driven systems when running
+    if (running) {
+        updateFlyMovement(dt);
+        animateLegs(dt);
+        updateEnvironment(dt);
+        updateScentParticles(dt);
+        sendScentStimulus();
+        updateFlyVisualFeedback(dt);
+    }
     updateCamera(dt);
 
     if (controls) controls.update();
@@ -2090,6 +2220,7 @@ function stimulateBodyPart(stimName) {
     if (ws && ws.readyState === 1) {
         ws.send(JSON.stringify({ cmd: 'stimulus_preset', name: stimName, amplitude: amp }));
         activeStimulus = stimName;
+        envStimulusSuppressed = false;
         document.getElementById('stim-status').textContent = 'Active: ' + stimName;
         highlightStimulated(stimName);
     }
@@ -2406,6 +2537,78 @@ function updateCommandDisplay(rates) {
         if (valEl) valEl.textContent = rate.toFixed(3);
         if (barEl) barEl.style.width = Math.min(rate / 0.3 * 100, 100) + '%';
     });
+
+    // Behavior summary
+    var summary = document.getElementById('behavior-summary');
+    if (!summary) return;
+    var behaviors = [];
+    var speed = ((rates.P9_L || 0) + (rates.P9_R || 0)) / 2;
+    var turnL = rates.DNa02_L || 0;
+    var turnR = rates.DNa02_R || 0;
+    var stop = ((rates.oDN1_L || 0) + (rates.oDN1_R || 0)) / 2;
+    var groom = ((rates.aDN1_L || 0) + (rates.aDN1_R || 0)) / 2;
+
+    if (speed > 0.01) behaviors.push('Walking');
+    if (turnL > 0.01 && turnL > turnR * 1.5) behaviors.push('Turning R');
+    else if (turnR > 0.01 && turnR > turnL * 1.5) behaviors.push('Turning L');
+    else if (turnL > 0.01 || turnR > 0.01) behaviors.push('Turning');
+    if (stop > 0.02) behaviors.push('Stopping');
+    if (groom > 0.01) behaviors.push('Grooming');
+
+    summary.textContent = behaviors.length > 0 ? behaviors.join(' + ') : 'Idle';
+}
+
+// ========================================================================
+// I/O PRESET CONTROLS
+// ========================================================================
+var IO_PRESET_GROUPS = [
+    'ORN_ATTRACTIVE_LEFT', 'ORN_ATTRACTIVE_RIGHT',
+    'ORN_AVOIDANT_LEFT', 'ORN_AVOIDANT_RIGHT',
+    'GRN_SUGAR_L', 'GRN_SUGAR_R',
+    'JO_C', 'JO_E', 'JO_F',
+    'Touch (left leg/body)', 'Touch (right leg/body)',
+    'Sugar (proboscis)',
+];
+
+// Wire slider oninput handlers
+(function() {
+    IO_PRESET_GROUPS.forEach(function(group) {
+        var slider = document.getElementById('io-' + group);
+        var hzEl = document.getElementById('io-' + group + '-hz');
+        if (slider && hzEl) {
+            slider.addEventListener('input', function() {
+                hzEl.textContent = this.value;
+            });
+        }
+    });
+})();
+
+function applyIOPresets() {
+    var rates = {};
+    IO_PRESET_GROUPS.forEach(function(group) {
+        var slider = document.getElementById('io-' + group);
+        if (slider) {
+            var hz = parseInt(slider.value);
+            if (hz > 0) rates[group] = hz;
+        }
+    });
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ cmd: 'stimulus_rate', rates: rates }));
+        envStimulusSuppressed = true; // suppress environmental overrides
+    }
+}
+
+function clearIOPresets() {
+    IO_PRESET_GROUPS.forEach(function(group) {
+        var slider = document.getElementById('io-' + group);
+        var hzEl = document.getElementById('io-' + group + '-hz');
+        if (slider) slider.value = 0;
+        if (hzEl) hzEl.textContent = '0';
+    });
+    if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ cmd: 'clear_stimulus' }));
+    }
+    envStimulusSuppressed = false;
 }
 
 // ========================================================================
@@ -2596,7 +2799,7 @@ function connect() {
 function sendCmd(cmd) {
     if (ws && ws.readyState === 1) {
         ws.send(JSON.stringify({ cmd: cmd }));
-        if (cmd === 'start') { running = true; updateRunState(); }
+        if (cmd === 'start') { running = true; envStimulusSuppressed = false; updateRunState(); }
         if (cmd === 'pause') { running = false; updateRunState(); }
     }
 }
@@ -2610,6 +2813,7 @@ function sendParam(key, value) {
 function clearStimulus() {
     sendCmd('clear_stimulus');
     activeStimulus = null;
+    envStimulusSuppressed = true;
     document.getElementById('stim-status').textContent = '';
     clearFlyStimHighlight();
     document.querySelectorAll('.stim-zone').forEach(function(z) { z.classList.remove('stim-active'); });

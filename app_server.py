@@ -313,6 +313,8 @@ async def websocket_endpoint(ws: WebSocket):
         "stimuli": engine.get_predefined_stimuli(),
         "group_labels": engine.group_labels,
         "body_info": engine.get_body_info(),
+        "command_neurons": engine.get_command_neuron_info(),
+        "sensory_groups": engine.get_sensory_group_info(),
     }))
     await ws.send_text(json.dumps({
         "type": "state",
@@ -356,6 +358,27 @@ async def websocket_endpoint(ws: WebSocket):
             elif cmd == "clear_stimulus":
                 engine.clear_stimulus()
 
+            elif cmd == "stimulus_rate":
+                # Rate-based stimulus via sensory group presets
+                # Format: {cmd: "stimulus_rate", rates: {group_name: hz, ...}}
+                rates = msg.get("rates", {})
+                neuron_rates = []
+                for group_name, hz in rates.items():
+                    hz = float(hz)
+                    if hz <= 0:
+                        continue
+                    if group_name in engine._sensory_groups:
+                        for idx in engine._sensory_groups[group_name]:
+                            neuron_rates.append({"id": int(idx), "rate": hz})
+                    elif group_name in engine._stimuli:
+                        # Predefined stimulus groups (Touch, Tickle, etc.)
+                        for idx in engine._stimuli[group_name]:
+                            neuron_rates.append({"id": int(idx), "rate": hz})
+                if neuron_rates:
+                    engine.inject_stimulus_by_rate(neuron_rates)
+                else:
+                    engine.clear_stimulus()
+
             elif cmd == "set_param":
                 key = msg.get("key")
                 value = msg.get("value")
@@ -369,6 +392,25 @@ async def websocket_endpoint(ws: WebSocket):
                     engine.send_group_rates = bool(value)
                 elif key == "send_motor_rates":
                     engine.send_motor_rates = bool(value)
+
+            elif cmd == "env_stimulus":
+                scent_left = float(msg.get("scent_left", 0))
+                scent_right = float(msg.get("scent_right", 0))
+                scent_type = msg.get("scent_type", "attractive")
+                if scent_type == "aversive":
+                    engine.apply_aversive_scent(scent_left, scent_right)
+                else:
+                    engine.apply_environmental_scent(scent_left, scent_right)
+
+            elif cmd == "env_collision":
+                hit_left = bool(msg.get("hit_left", False))
+                hit_right = bool(msg.get("hit_right", False))
+                intensity = float(msg.get("intensity", 1.0))
+                engine.apply_collision_stimulus(hit_left, hit_right, intensity)
+
+            elif cmd == "env_gustatory":
+                intensity = float(msg.get("intensity", 1.0))
+                engine.apply_gustatory_stimulus(intensity)
 
             elif cmd == "motor_detail":
                 group_name = msg.get("group", "")

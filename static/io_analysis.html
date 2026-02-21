@@ -6,7 +6,7 @@
 <title>FastFly I/O Analysis</title>
 <script>
 // API Configuration
-window.API_BASE_URL = 'http://18.222.142.185:8000';
+window.API_BASE_URL = 'http://127.0.0.1:8000';
 const originalFetch = window.fetch;
 window.fetch = function(url, options) {
     if (typeof url === 'string' && url.startsWith('/api/')) {
