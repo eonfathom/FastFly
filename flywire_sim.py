@@ -268,8 +268,10 @@ def load_connectome_binary(filename):
 # Generate synthetic connectome
 # ================================================================
 
-def generate_synthetic(n_neurons=139255, n_synapses=54500000, seed=42):
+def generate_synthetic(n_neurons=139255, n_synapses=54500000, seed=42,
+                       ei_ratio=2.0, weight_scale=1.0):
     print(f"Generating synthetic connectome ({n_neurons} neurons, {n_synapses} synapses)...")
+    print(f"  ei_ratio={ei_ratio}, weight_scale={weight_scale}")
     rng = np.random.default_rng(seed)
 
     mean_deg = n_synapses / n_neurons
@@ -294,10 +296,12 @@ def generate_synthetic(n_neurons=139255, n_synapses=54500000, seed=42):
     targets = rng.integers(0, n_neurons, actual_synapses, dtype=np.uint32)
     excitatory = rng.random(n_neurons) < 0.7
     weights = np.abs(rng.normal(0, 0.03, actual_synapses)).astype(np.float32) + 0.005
+    weights *= weight_scale
     # Apply Dale's law per neuron
+    # Inhibitory weights scaled by ei_ratio (>2.33 = balanced, <2.33 = net excitation)
     for i in range(n_neurons):
         if not excitatory[i]:
-            weights[offsets[i]:offsets[i+1]] *= -1
+            weights[offsets[i]:offsets[i+1]] *= -ei_ratio
 
     print(f"  Generated {actual_synapses} synapses")
     print(f"  Degree: min={degrees.min()}, max={degrees.max()}, mean={degrees.mean():.1f}\n")
@@ -379,7 +383,7 @@ def run_simulation(n_neurons, n_synapses, offsets, targets, weights,
 
     # Initialize voltages randomly near threshold to kickstart activity
     rng_cp = cp.random.default_rng(seed)
-    d_voltage    = rng_cp.uniform(0.0, 0.9, n_neurons).astype(cp.float32)
+    d_voltage    = rng_cp.uniform(0.3, 0.7, n_neurons).astype(cp.float32)
     d_current    = cp.zeros(n_neurons, dtype=cp.float32)
     d_spike_bits = cp.zeros(spike_words, dtype=cp.uint32)
     d_spike_idx  = cp.zeros(n_neurons, dtype=cp.uint32)

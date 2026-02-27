@@ -49,20 +49,25 @@ SENSORY_GROUP_NAMES = [
 class SimEngine:
     """GPU-accelerated LIF simulator wrapping CuPy CUDA kernels."""
 
-    def __init__(self, data_file=None, seed=42, dt=0.1):
+    def __init__(self, data_file=None, seed=42, dt=0.1, ei_ratio=2.0,
+                 weight_scale=1.0, noise_amp=0.35):
         """Initialize the simulation engine.
-        
+
         Args:
             data_file: Optional binary connectome file path
             seed: Random seed
             dt: Simulation timestep duration in milliseconds (default: 0.1 ms)
+            ei_ratio: Inhibitory/excitatory weight ratio for synthetic connectome
+            weight_scale: Global weight multiplier for synthetic connectome
+            noise_amp: Background noise amplitude (drives spontaneous activity)
         """
         if data_file:
             self.n_neurons, self.n_synapses, offsets, targets, weights = \
                 load_connectome_binary(data_file)
         else:
             self.n_neurons, self.n_synapses, offsets, targets, weights = \
-                generate_synthetic(seed=seed)
+                generate_synthetic(seed=seed, ei_ratio=ei_ratio,
+                                   weight_scale=weight_scale)
 
         self.kernels = compile_kernels()
         self.seed = seed
@@ -78,7 +83,7 @@ class SimEngine:
 
         # GPU arrays — neuron state
         rng = cp.random.default_rng(seed)
-        self.d_voltage = rng.uniform(0.0, 0.9, self.n_neurons).astype(cp.float32)
+        self.d_voltage = rng.uniform(0.3, 0.7, self.n_neurons).astype(cp.float32)
         self.d_current = cp.zeros(self.n_neurons, dtype=cp.float32)
 
         # Spike bookkeeping
@@ -91,7 +96,7 @@ class SimEngine:
         self.tau_decay   = np.float32(0.9)
         self.v_threshold = np.float32(1.0)
         self.v_reset     = np.float32(0.0)
-        self.noise_amp   = np.float32(0.4)
+        self.noise_amp   = np.float32(noise_amp)
 
         # Launch config
         self.BLOCK = 256
