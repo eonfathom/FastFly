@@ -628,6 +628,13 @@ class SimEngine:
                 motor_rates[name] = round(rate, 6)
             result["motor_rates"] = motor_rates
 
+            # Log left/right descending bias
+            dl = motor_rates.get('descending_left', 0)
+            dr = motor_rates.get('descending_right', 0)
+            if dl > 0 or dr > 0:
+                bias = dl - dr
+                print(f"[MOTOR] L={dl:.6f} R={dr:.6f} bias={bias:+.6f} ({'LEFT' if bias > 0 else 'RIGHT'})")
+
         # Command neuron rates
         if self._command_spike_accum is not None and self._n_command > 0:
             cmd_counts = self._command_spike_accum.get()
@@ -635,6 +642,13 @@ class SimEngine:
             for i, name in enumerate(self._command_names):
                 command_rates[name] = round(float(cmd_counts[i]) / n, 6)
             result["command_rates"] = command_rates
+
+            # Log command neuron left/right bias
+            dna02_l = command_rates.get('DNa02_L', 0)
+            dna02_r = command_rates.get('DNa02_R', 0)
+            if dna02_l > 0 or dna02_r > 0:
+                cmd_bias = dna02_l - dna02_r
+                print(f"[CMD]   DNa02 L={dna02_l:.6f} R={dna02_r:.6f} bias={cmd_bias:+.6f}")
 
         # Active indices (for 3D viz) — only transfer every Nth batch
         self._batch_counter += 1
