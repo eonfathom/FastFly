@@ -5,16 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FlyWire Connectome Simulator</title>
 <script>
-// API Configuration
-window.API_BASE_URL = 'http://127.0.0.1:8000';
-window.WS_BASE_URL = 'ws://127.0.0.1:8000';
-const originalFetch = window.fetch;
-window.fetch = function(url, options) {
-    if (typeof url === 'string' && url.startsWith('/api/')) {
-        url = window.API_BASE_URL + url;
-    }
-    return originalFetch(url, options);
-};
+// API Configuration — auto-detect: use current host for cloud, localhost for local dev
+(function() {
+    var isLocal = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+    var proto = location.protocol === 'https:' ? 'https:' : 'http:';
+    var wsproto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    window.API_BASE_URL = isLocal ? 'http://127.0.0.1:8000' : proto + '//' + location.host;
+    window.WS_BASE_URL  = isLocal ? 'ws://127.0.0.1:8000'  : wsproto + '//' + location.host;
+    var originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+        if (typeof url === 'string' && url.startsWith('/api/')) {
+            url = window.API_BASE_URL + url;
+        }
+        return originalFetch(url, options);
+    };
+})();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -454,6 +459,23 @@ input[type="range"] {
 </style>
 </head>
 <body>
+<!-- Cold-start loading overlay (GPU containers take ~10-30s to boot) -->
+<div id="cold-start-overlay" style="
+    position: fixed; inset: 0; z-index: 9999;
+    background: #0a0e17; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px;
+">
+    <div style="font-size: 28px; font-weight: 600; color: #e0e0e0;">FlyWire Connectome Simulator</div>
+    <div id="cold-start-msg" style="font-size: 15px; color: #94a3b8;">Waking up GPU container...</div>
+    <div style="width: 200px; height: 3px; background: #1e293b; border-radius: 2px; overflow: hidden;">
+        <div style="width: 40%; height: 100%; background: #60a5fa; border-radius: 2px;
+            animation: coldpulse 1.5s ease-in-out infinite alternate;"></div>
+    </div>
+    <div style="font-size: 12px; color: #475569; margin-top: 8px;">First load takes ~10-30 seconds</div>
+</div>
+<style>
+@keyframes coldpulse { from { width: 20%; margin-left: 0; } to { width: 40%; margin-left: 60%; } }
+</style>
 <div class="layout">
     <!-- Left Panel: Controls -->
     <div class="panel panel-left">
@@ -2761,17 +2783,28 @@ document.addEventListener('keydown', function(e) {
 // ========================================================================
 // WEBSOCKET
 // ========================================================================
+var _connectAttempts = 0;
 function connect() {
+    _connectAttempts++;
+    var overlay = document.getElementById('cold-start-overlay');
+    var msg = document.getElementById('cold-start-msg');
+    if (overlay && overlay.style.display !== 'none' && _connectAttempts > 1) {
+        msg.textContent = 'GPU container starting... (attempt ' + _connectAttempts + ')';
+    }
+
     ws = new WebSocket(window.WS_BASE_URL + '/ws');
 
     ws.onopen = function() {
+        _connectAttempts = 0;
+        var overlay = document.getElementById('cold-start-overlay');
+        if (overlay) overlay.style.display = 'none';
         document.getElementById('status-dot').className = 'status-dot connected';
         document.getElementById('status-text').textContent = 'Connected (paused)';
     };
 
     ws.onclose = function() {
         document.getElementById('status-dot').className = 'status-dot disconnected';
-        document.getElementById('status-text').textContent = 'Disconnected';
+        document.getElementById('status-text').textContent = 'Disconnected — reconnecting...';
         running = false;
         setTimeout(connect, 2000);
     };
