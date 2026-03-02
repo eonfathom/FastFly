@@ -35,26 +35,21 @@ base_image = (
         "requests",
     )
     .apt_install("git")
-    .run_commands("mkdir -p /data")
+    .run_commands("mkdir -p /data && mkdir -p /app")
     .run_commands(
-        "git clone https://github.com/AqeelAqeel/FastFly.git /data-build",
-        "cd /data-build && git checkout feat-glb-flybody-aqeel",
-        "cd /data-build && python download_connectome.py",
-        "cd /data-build && python download_metadata.py",
-        "cp /data-build/flywire_v783.bin /data/flywire_v783.bin",
-        "cp /data-build/neuron_annotations.npz /data/neuron_annotations.npz",
-        "cp -r /data-build/static/neurons.json /data/neurons.json || true",
-        "rm -rf /data-build",
+        "git clone https://github.com/AqeelAqeel/FastFly.git /data-build"
+        " && cd /data-build && git checkout feat-glb-flybody-aqeel"
+        " && python download_connectome.py"
+        " && python download_metadata.py"
+        " && cp flywire_v783.bin /data/"
+        " && cp neuron_annotations.npz /data/"
+        " && cp -r . /app/"
+        " && rm -rf /data-build",
+        force_build=True,
     )
 )
 
-image = base_image.add_local_dir(
-    LOCAL_DIR,
-    remote_path="/app",
-    copy=True,
-    ignore=["*.venv*", "__pycache__", ".git", "*.bin", "*.npz",
-            "nourse_model", "*.png", "*.jpg", "*.svg.png", "uv.lock"],
-)
+image = base_image
 
 app = modal.App("fastfly", image=image)
 
@@ -73,11 +68,15 @@ def serve():
     for f in ["flywire_v783.bin", "neuron_annotations.npz"]:
         src, dst = f"/data/{f}", f"/app/{f}"
         if os.path.exists(src) and not os.path.exists(dst):
-            os.symlink(src, dst)
+            try:
+                os.symlink(src, dst)
+            except FileExistsError:
+                pass
 
     sys.argv = ["app_server", "--data", "/app/flywire_v783.bin",
                 "--host", "0.0.0.0", "--port", "8000"]
-    sys.path.insert(0, "/app")
+    if "/app" not in sys.path:
+        sys.path.insert(0, "/app")
     from app_server import app as fastapi_app
     return fastapi_app
 
@@ -91,7 +90,10 @@ def run_cli(timesteps: int = 1000):
     for f in ["flywire_v783.bin", "neuron_annotations.npz"]:
         src, dst = f"/data/{f}", f"/app/{f}"
         if os.path.exists(src) and not os.path.exists(dst):
-            os.symlink(src, dst)
+            try:
+                os.symlink(src, dst)
+            except FileExistsError:
+                pass
     result = subprocess.run(
         ["python", "/app/flywire_sim.py",
          "--data", "/app/flywire_v783.bin",
