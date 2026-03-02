@@ -11,41 +11,49 @@ Run:
 """
 
 import modal
+from pathlib import Path
+
+LOCAL_DIR = Path(__file__).parent
 
 # ---------------------------------------------------------------------------
-# 1. Container image — built once, cached by Modal
-#    Split into layers so each caches independently.
+# 1. Container image
+#    - CUDA + Python packages + connectome data are baked in (cached)
+#    - App source code is added via add_local_dir (fresh on each deploy)
 # ---------------------------------------------------------------------------
-
-# Layer 1: Base OS + CUDA toolkit (needed for CuPy kernel compilation)
-cuda_image = modal.Image.from_registry(
-    "nvidia/cuda:12.2.0-devel-ubuntu22.04",
-    add_python="3.11",
-)
-
-# Layer 2: Core Python packages (cached after first build)
-packages_image = cuda_image.pip_install(
-    "cupy-cuda12x>=13.6.0",
-    "fastapi>=0.129.0",
-    "numpy>=1.24.0,<2.0.0",
-    "uvicorn[standard]>=0.32.0",
-    "pandas>=2.0.0",
-    "pyarrow>=10.0.0",
-    "requests",
-)
-
-# Layer 3: Clone repo + download connectome data
-image = (
-    packages_image
+base_image = (
+    modal.Image.from_registry(
+        "nvidia/cuda:12.2.0-devel-ubuntu22.04",
+        add_python="3.11",
+    )
+    .pip_install(
+        "cupy-cuda12x>=13.6.0",
+        "fastapi>=0.129.0",
+        "numpy>=1.24.0,<2.0.0",
+        "uvicorn[standard]>=0.32.0",
+        "pandas>=2.0.0",
+        "pyarrow>=10.0.0",
+        "requests",
+    )
     .apt_install("git")
+    .run_commands("mkdir -p /data")
     .run_commands(
-        "git clone https://github.com/AqeelAqeel/FastFly.git /app",
-        "cd /app && git checkout feat-glb-flybody-aqeel",
+        "git clone https://github.com/AqeelAqeel/FastFly.git /data-build",
+        "cd /data-build && git checkout feat-glb-flybody-aqeel",
+        "cd /data-build && python download_connectome.py",
+        "cd /data-build && python download_metadata.py",
+        "cp /data-build/flywire_v783.bin /data/flywire_v783.bin",
+        "cp /data-build/neuron_annotations.npz /data/neuron_annotations.npz",
+        "cp -r /data-build/static/neurons.json /data/neurons.json || true",
+        "rm -rf /data-build",
     )
-    .run_commands(
-        "cd /app && python download_connectome.py",
-        "cd /app && python download_metadata.py",
-    )
+)
+
+image = base_image.add_local_dir(
+    LOCAL_DIR,
+    remote_path="/app",
+    copy=True,
+    ignore=["*.venv*", "__pycache__", ".git", "*.bin", "*.npz",
+            "nourse_model", "*.png", "*.jpg", "*.svg.png", "uv.lock"],
 )
 
 app = modal.App("fastfly", image=image)
@@ -60,7 +68,13 @@ app = modal.App("fastfly", image=image)
 )
 @modal.asgi_app()
 def serve():
-    import sys
+    import sys, os
+
+    for f in ["flywire_v783.bin", "neuron_annotations.npz"]:
+        src, dst = f"/data/{f}", f"/app/{f}"
+        if os.path.exists(src) and not os.path.exists(dst):
+            os.symlink(src, dst)
+
     sys.argv = ["app_server", "--data", "/app/flywire_v783.bin",
                 "--host", "0.0.0.0", "--port", "8000"]
     sys.path.insert(0, "/app")
@@ -73,7 +87,11 @@ def serve():
 # ---------------------------------------------------------------------------
 @app.function(gpu="T4", timeout=600)
 def run_cli(timesteps: int = 1000):
-    import subprocess
+    import subprocess, os
+    for f in ["flywire_v783.bin", "neuron_annotations.npz"]:
+        src, dst = f"/data/{f}", f"/app/{f}"
+        if os.path.exists(src) and not os.path.exists(dst):
+            os.symlink(src, dst)
     result = subprocess.run(
         ["python", "/app/flywire_sim.py",
          "--data", "/app/flywire_v783.bin",
